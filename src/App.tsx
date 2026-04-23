@@ -1,0 +1,599 @@
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { ThemeProvider } from "@/hooks/useTheme";
+import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import ProtectedRoute from "@/components/ProtectedRoute";
+import { AgentActivityDashboard } from "@/components/AgentActivityDashboard";
+import ReportsPage from "./pages/Reports";
+import Auth from "./pages/Auth";
+import Dashboard from "./pages/Dashboard";
+import Leads from "./pages/Leads";
+import CenterLeadPortal from "./pages/CenterLeadPortal";
+import CenterCalendarView from "./pages/CenterCalendarView";
+import CallbackRequestPage from "./pages/CallbackRequestPage";
+import CommissionPortal from "./pages/CommissionPortal";
+import CallResultUpdate from "./pages/CallResultUpdate";
+import CallResultJourney from "./pages/CallResultJourney";
+import NewCallback from "./pages/NewCallback";
+import NewBpo from "./pages/NewBpo";
+import DailyDealFlowPage from "./pages/DailyDealFlow/DailyDealFlowPage";
+import BpoLeadDetailsPage from "@/pages/BpoLeadDetailsPage";
+import LeadDetailsPage from "./pages/LeadDetails/LeadDetailsPage";
+import TransferPortalPage from "./pages/TransferPortalPage";
+import SubmissionPortalPage from "./pages/SubmissionPortalPage";
+import RetainersKanbanPage from "./pages/RetainersKanbanPage";
+import BulkLookupPage from "./pages/BulkLookupPage";
+import SalesMapPage from "./pages/SalesMapPage";
+import OrderFulfillmentPage from "./pages/OrderFulfillmentPage";
+import OrderFulfillmentAssignPage from "./pages/OrderFulfillmentAssignPage";
+import DealFlowLookup from "./pages/DealFlowLookup";
+import AgentLicensing from "./pages/AgentLicensing";
+import { AgentEligibilityPage } from "./pages/AgentEligibilityPage";
+import BufferPerformanceReport from "./pages/BufferPerformanceReport";
+import LicensedAgentPerformanceReport from "./pages/LicensedAgentPerformanceReport";
+import LicensedAgentInbox from "./pages/LicensedAgentInbox";
+import SlackPage from "./pages/SlackPage";
+import TaskDetailView from "./pages/TaskDetailView";
+import RetentionTasksView from "./pages/RetentionTasksView";
+import AdminAnalytics from "./pages/AdminAnalytics";
+import UserManagement from "./pages/UserManagement";
+import MarketingTeamPage from "./pages/MarketingTeamPage";
+import LeadAssignmentPage from "./pages/LeadAssignmentPage";
+import AccountOrderManagementPage from "./pages/AccountOrderManagementPage";
+import QuickActionsPage from "./pages/QuickActionsPage";
+import OnboardingManagementPage from "./pages/OnboardingManagementPage";
+import AccountOrderDetailPage from "./pages/AccountOrderDetailPage";
+import AccountBpoProfilesPage from "./pages/AccountBpoProfilesPage";
+import AccountBpoProfileDetailPage from "./pages/AccountBpoProfileDetailPage";
+import SectionPlaceholderPage from "./pages/SectionPlaceholderPage";
+import OnboardingPortalPage from "./pages/OnboardingPortalPage";
+import BpoManagementPage from "./pages/BpoManagementPage";
+import AppShell from "@/components/layout/AppShell";
+import LogoLoader from "@/components/LogoLoader";
+import { Navigate } from "react-router-dom";
+
+const queryClient = new QueryClient();
+
+const AuthAwareFallbackRoute = () => {
+  const { user, loading } = useAuth();
+
+  if (loading) return <LogoLoader fullscreen label="Loading..." />;
+
+  return <Navigate to={user ? "/leads" : "/auth"} replace />;
+};
+
+const App = () => (
+  <ThemeProvider>
+  <QueryClientProvider client={queryClient}>
+    <AuthProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Auth />} />
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/center-auth" element={<Navigate to="/auth" replace />} />
+            <Route 
+              path="/dashboard" 
+              element={
+                <ProtectedRoute>
+                  <Navigate to="/leads" replace />
+                </ProtectedRoute>
+              } 
+            />
+
+            <Route 
+              path="/leads" 
+              element={
+                <ProtectedRoute>
+                  <AppShell title="BPO Contacts">
+                    <Leads />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route
+              path="/sales-map"
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Sales Map">
+                    <SalesMapPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/order-fulfillment"
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Order Fulfillment">
+                    <OrderFulfillmentPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/order-fulfillment/:orderId/fulfill"
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Fulfill Order">
+                    <OrderFulfillmentAssignPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+
+            <Route 
+              path="/retainers" 
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Retainers">
+                    <RetainersKanbanPage />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/manager-dashboard" 
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Dashboard">
+                    <Dashboard />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+
+            <Route
+              path="/onboarding-portal"
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Onboarding Portal">
+                    <OnboardingPortalPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/marketing-team"
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Marketing Team">
+                    <MarketingTeamPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/account-management/orders"
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Account Management">
+                    <AccountOrderManagementPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/account-management/orders/:orderId"
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Account Management">
+                    <AccountOrderDetailPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/account-management/quick-actions"
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Quick Actions">
+                    <QuickActionsPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/account-management/onboarding"
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Onboarding Management">
+                    <OnboardingManagementPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/account-management/lawyer-profiles"
+              element={
+                <ProtectedRoute>
+                  <AppShell title="BPO Profile Management">
+                    <AccountBpoProfilesPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/account-management/bpo-profiles"
+              element={
+                <ProtectedRoute>
+                  <AppShell title="BPO Profile Management">
+                    <AccountBpoProfilesPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/account-management/lawyer-profiles/:userId"
+              element={
+                <ProtectedRoute>
+                  <AppShell title="BPO Profile Management">
+                    <AccountBpoProfileDetailPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/account-management/bpo-profiles/:userId"
+              element={
+                <ProtectedRoute>
+                  <AppShell title="BPO Profile Management">
+                    <AccountBpoProfileDetailPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/lead-assignment"
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Lead Assignment">
+                    <LeadAssignmentPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="/center-lead-portal" 
+              element={
+                <ProtectedRoute>
+                  <AppShell title="My Leads">
+                    <CenterLeadPortal />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/center-calendar-view" 
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Calendar View">
+                    <CenterCalendarView />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/center-callback-request" 
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Callback Request">
+                    <CallbackRequestPage />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/commission-portal" 
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Retainers">
+                    <CommissionPortal />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/call-result-update" 
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Call Result Update">
+                    <CallResultUpdate />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/add-lead" 
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Add BPO Contact">
+                    <NewCallback />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route
+              path="/add-law-firm"
+              element={<Navigate to="/add-bpo" replace />}
+            />
+            <Route
+              path="/add-bpo"
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Add BPO">
+                    <NewBpo />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="/call-result-journey" 
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Call Result Journey">
+                    <CallResultJourney />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/leads/:submissionId" 
+              element={
+                <ProtectedRoute>
+                  <AppShell title="BPO Contact Details">
+                    <LeadDetailsPage />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/analytics" 
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Analytics">
+                    <AgentActivityDashboard />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/daily-deal-flow" 
+              element={
+                <ProtectedRoute>
+                  <AppShell
+                    title="Daily Outreach Report"
+                    defaultSidebarCollapsed
+                    autoCollapseSidebarAfterMs={2000}
+                  >
+                    <DailyDealFlowPage />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route
+              path="/slack"
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Slack">
+                    <SlackPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/hubspot"
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Hubspot">
+                    <SectionPlaceholderPage sectionName="Hubspot" />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/lawyer-management"
+              element={<Navigate to="/bpo-management" replace />}
+            />
+            <Route
+              path="/bpo-management"
+              element={
+                <ProtectedRoute>
+                  <AppShell title="BPO Management">
+                    <BpoManagementPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="/lead-detail/:id" 
+              element={
+                <ProtectedRoute>
+                  <AppShell
+                    title="BPO Lead Details"
+                    defaultSidebarCollapsed
+                    autoCollapseSidebarAfterMs={2000}
+                  >
+                    <BpoLeadDetailsPage />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/transfer-portal" 
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Marketing Opportunities">
+                    <TransferPortalPage />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/submission-portal" 
+              element={
+                <ProtectedRoute>
+                  <AppShell title="BPO Portal">
+                    <SubmissionPortalPage />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route
+              path="/reports"
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Agent Reports & Logs">
+                    <ReportsPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/product-guide"
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Product Guide">
+                    <SectionPlaceholderPage sectionName="Product Guide" />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="/bulk-lookup" 
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Bulk Lookup">
+                    <BulkLookupPage />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/deal-flow-lookup" 
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Deal Flow Lookup">
+                    <DealFlowLookup />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/agent-licensing" 
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Find Eligible Onboarding Agents">
+                    <AgentLicensing />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/agent-eligibility" 
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Agent Eligibility">
+                    <AgentEligibilityPage />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/buffer-performance-report" 
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Buffer Performance">
+                    <BufferPerformanceReport />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/licensed-agent-performance-report" 
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Licensed Agent Performance">
+                    <LicensedAgentPerformanceReport />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/licensed-agent-inbox" 
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Inbox">
+                    <LicensedAgentInbox />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/task/:taskId" 
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Task Details">
+                    <TaskDetailView />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/retention-tasks" 
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Retainers">
+                    <RetentionTasksView />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/user-management" 
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Users">
+                    <UserManagement />
+                  </AppShell>
+                </ProtectedRoute>
+              } 
+            />
+            <Route
+              path="/admin-analytics/*"
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Admin Analytics">
+                    <AdminAnalytics />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<AuthAwareFallbackRoute />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </AuthProvider>
+  </QueryClientProvider>
+  </ThemeProvider>
+);
+
+export default App;

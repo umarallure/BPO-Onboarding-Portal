@@ -1,0 +1,250 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@100..900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light mode base */
+    --background: 0 0% 98%;
+    --foreground: 0 0% 13%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 13%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 13%;
+
+    /* 10% Accent - Orange (#AE4010) */
+    --primary: 18 83% 37%; 
+    --primary-foreground: 0 0% 95%;
+
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 13%;
+
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 40%;
+
+    --accent: 18 83% 37%;
+    --accent-foreground: 0 0% 95%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 18 83% 37%;
+    --radius: 0.5rem;
+
+    /* Sidebar tokens (used by AppShell) */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 13%;
+    --sidebar-primary: 18 83% 37%;
+    --sidebar-primary-foreground: 0 0% 95%;
+    --sidebar-accent: 0 0% 96%;
+    --sidebar-accent-foreground: 0 0% 13%;
+    --sidebar-border: 0 0% 90%;
+    --sidebar-ring: 18 83% 37%;
+  }
+
+  .dark {
+    --background: 0 0% 12.5%;
+    --foreground: 0 0% 90%;
+
+    --card: 0 0% 14%;
+    --card-foreground: 0 0% 90%;
+
+    --popover: 0 0% 14%;
+    --popover-foreground: 0 0% 90%;
+
+    --primary: 18 83% 37%;
+    --primary-foreground: 0 0% 95%;
+
+    --secondary: 0 0% 18%;
+    --secondary-foreground: 0 0% 90%;
+
+    --muted: 0 0% 18%;
+    --muted-foreground: 0 0% 60%;
+
+    --accent: 0 0% 18%;
+    --accent-foreground: 0 0% 90%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --ring: 18 83% 37%;
+
+    --sidebar-background: 0 0% 11%;
+    --sidebar-foreground: 0 0% 90%;
+    --sidebar-primary: 18 83% 37%;
+    --sidebar-primary-foreground: 0 0% 95%;
+    --sidebar-accent: 0 0% 16%;
+    --sidebar-accent-foreground: 0 0% 90%;
+    --sidebar-border: 0 0% 18%;
+    --sidebar-ring: 18 83% 37%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+}
+
+@layer utilities {
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .app-main .container {
+    max-width: none;
+    width: 100%;
+  }
+
+  .app-main .max-w-7xl,
+  .app-main .max-w-6xl,
+  .app-main .max-w-5xl,
+  .app-main .max-w-4xl,
+  .app-main .max-w-3xl,
+  .app-main .max-w-2xl {
+    max-width: none;
+  }
+
+  .app-main .min-h-screen {
+    min-height: 100%;
+  }
+}
+
+/* ── Dashboard Premium Theme ── */
+
+.dashboard-premium {
+  /* Light mode defaults */
+  --dash-bg: #f5f3f0;
+  --dash-surface: rgba(255, 255, 255, 0.75);
+  --dash-border: rgba(0, 0, 0, 0.08);
+  --dash-border-hover: rgba(0, 0, 0, 0.15);
+  --dash-text: #1a1a1a;
+  --dash-text-muted: #6b6560;
+  --dash-accent: #AE4010;
+  --dash-accent-light: #F9D7B1;
+  --dash-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04);
+  --dash-shadow-hover: 0 2px 8px rgba(0,0,0,0.1), 0 8px 24px rgba(0,0,0,0.08);
+  --dash-blur: 12px;
+  --dash-radius: 12px;
+  --dash-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dark .dashboard-premium {
+  --dash-bg: #202020;
+  --dash-surface: rgba(26, 26, 26, 0.6);
+  --dash-border: rgba(255, 255, 255, 0.07);
+  --dash-border-hover: rgba(255, 255, 255, 0.12);
+  --dash-text: #e8e4e0;
+  --dash-text-muted: #8a8580;
+  --dash-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.2);
+  --dash-shadow-hover: 0 2px 8px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.3);
+}
+
+.dashboard-premium {
+  background: var(--dash-bg);
+  color: var(--dash-text);
+  min-height: 100%;
+}
+
+/* ── Fade-up entrance animation ── */
+
+@keyframes dash-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dash-animate-in {
+  animation: dash-fade-up 0.5s var(--dash-ease) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-animate-in {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── Recharts overrides inside dashboard ── */
+
+.dashboard-premium .recharts-cartesian-grid line {
+  stroke: rgba(0, 0, 0, 0.06);
+}
+
+.dark .dashboard-premium .recharts-cartesian-grid line {
+  stroke: rgba(255, 255, 255, 0.05);
+}
+
+.dashboard-premium .recharts-text {
+  fill: var(--dash-text-muted);
+  font-size: 11px;
+}
+
+.dashboard-premium .recharts-tooltip-cursor {
+  stroke: rgba(0, 0, 0, 0.08);
+}
+
+.dark .dashboard-premium .recharts-tooltip-cursor {
+  stroke: rgba(255, 255, 255, 0.08);
+}
+
+/* ── Tabular numerals for metrics ── */
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-premium .dash-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(174, 64, 16, 0.34) transparent;
+}
+
+.dashboard-premium .dash-scrollbar::-webkit-scrollbar {
+  width: 10px;
+}
+
+.dashboard-premium .dash-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dashboard-premium .dash-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(174, 64, 16, 0.18), rgba(174, 64, 16, 0.38));
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.dashboard-premium .dash-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(174, 64, 16, 0.28), rgba(174, 64, 16, 0.52));
+  background-clip: padding-box;
+}
