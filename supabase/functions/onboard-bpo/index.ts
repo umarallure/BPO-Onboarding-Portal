@@ -14,20 +14,9 @@ const json = (body: unknown, status = 200) =>
     headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
   });
 
-const US_STATE_CODES = [
-  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA',
-  'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
-  'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT',
-  'VA', 'WA', 'WV', 'WI', 'WY',
-] as const;
-const US_STATE_CODE_SET = new Set<string>(US_STATE_CODES);
-const LANGUAGE_VALUES = ['English', 'Spanish'] as const;
-const LANGUAGE_VALUE_SET = new Set<string>(LANGUAGE_VALUES);
-const POSITION_VALUES = ['accounting', 'marketing', 'invoicing', 'intake_team', 'other'] as const;
-const POSITION_VALUE_SET = new Set<string>(POSITION_VALUES);
-const CONTACT_VALUES = ['email', 'phone', 'text'] as const;
+const PUBLISHER_ROLES = ['publisher_admin', 'publisher_closer'] as const;
 
-const optionalTextSchema = z.preprocess(
+const optionalText = z.preprocess(
   (value) => {
     if (typeof value !== 'string') return undefined;
     const trimmed = value.trim();
@@ -36,7 +25,7 @@ const optionalTextSchema = z.preprocess(
   z.string().optional(),
 );
 
-const optionalEmailSchema = z.preprocess(
+const optionalEmail = z.preprocess(
   (value) => {
     if (typeof value !== 'string') return undefined;
     const trimmed = value.trim().toLowerCase();
@@ -46,16 +35,7 @@ const optionalEmailSchema = z.preprocess(
   z.string().optional(),
 );
 
-const optionalStateCodeSchema = z.preprocess(
-  (value) => {
-    if (typeof value !== 'string') return undefined;
-    const trimmed = value.trim().toUpperCase();
-    return US_STATE_CODE_SET.has(trimmed) ? trimmed : undefined;
-  },
-  z.string().optional(),
-);
-
-const optionalStringArraySchema = z.preprocess(
+const optionalStringArray = z.preprocess(
   (value) => {
     if (!Array.isArray(value)) return [];
     return value
@@ -65,134 +45,100 @@ const optionalStringArraySchema = z.preprocess(
   z.array(z.string()).default([]),
 );
 
-const optionalLanguageArraySchema = z.preprocess(
-  (value) => {
-    if (!Array.isArray(value)) return [];
-    return value
-      .map((item) => (typeof item === 'string' ? item.trim() : ''))
-      .filter((item): item is (typeof LANGUAGE_VALUES)[number] => LANGUAGE_VALUE_SET.has(item));
-  },
-  z.array(z.string()).default([]),
-);
+/* ── Mode: BPO Center ── */
 
-const optionalStateCodeArraySchema = z.preprocess(
-  (value) => {
-    if (!Array.isArray(value)) return [];
-    return value
-      .map((item) => (typeof item === 'string' ? item.trim().toUpperCase() : ''))
-      .filter((item) => US_STATE_CODE_SET.has(item));
-  },
-  z.array(z.string()).default([]),
-);
-
-const optionalNonNegativeIntSchema = z.preprocess(
-  (value) => {
-    if (typeof value === 'number') {
-      return Number.isFinite(value) && value >= 0 ? Math.trunc(value) : undefined;
-    }
-    if (typeof value === 'string') {
-      const trimmed = value.trim();
-      if (!trimmed) return undefined;
-      const parsed = Number.parseInt(trimmed, 10);
-      return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
-    }
-    return undefined;
-  },
-  z.number().int().min(0).optional(),
-);
-
-const officeAddressSchema = z.preprocess(
-  (value) => (value && typeof value === 'object' ? value : {}),
-  z.object({
-    street: optionalTextSchema,
-    suite: optionalTextSchema,
-    city: optionalTextSchema,
-    state: optionalStateCodeSchema,
-    zip: optionalTextSchema,
+const centerRequestSchema = z.object({
+  mode: z.literal('center'),
+  center: z.object({
+    center_name: z.string().trim().min(1, 'Center name is required'),
+    location: optionalText,
+    website_or_linkedin: optionalText,
+    contact_email: optionalEmail,
+    contact_phone: optionalText,
+    number_of_agents: optionalText,
+    languages: optionalStringArray,
+    operating_hours: optionalText,
   }),
-);
-
-const barLicenseSchema = z.preprocess(
-  (value) => (value && typeof value === 'object' ? value : {}),
-  z.object({
-    state: optionalStateCodeSchema,
-    number: optionalTextSchema,
-  }),
-);
-
-const teamMemberSchema = z.preprocess(
-  (value) => (value && typeof value === 'object' ? value : {}),
-  z.object({
-    full_name: optionalTextSchema,
-    email: optionalEmailSchema,
-    phone: optionalTextSchema,
-    state: optionalStateCodeSchema,
-    position: z.preprocess(
-      (value) => {
-        if (typeof value !== 'string') return undefined;
-        const trimmed = value.trim();
-        return POSITION_VALUE_SET.has(trimmed) ? trimmed : undefined;
-      },
-      z.enum(POSITION_VALUES).optional().default('intake_team'),
-    ),
-    position_other: optionalTextSchema,
-    weekly_availability: z.unknown().optional().default(null),
-    holiday_hours: z.preprocess((value) => (Array.isArray(value) ? value : []), z.array(z.unknown()).default([])),
-    shift_availability: optionalTextSchema,
-  }).transform((member) => ({
-    ...member,
-    position_other: member.position === 'other' ? member.position_other : null,
-  })),
-);
-
-const onboardingRequestSchema = z.object({
-  account: z.object({
-    email: z.string().email('Valid email required').transform((value) => value.toLowerCase().trim()),
-    password: z.string().min(8, 'Password must be at least 8 characters'),
-  }),
-  attorneyProfile: z.preprocess(
-    (value) => (value && typeof value === 'object' ? value : {}),
-    z.object({
-      fullName: optionalTextSchema,
-      firmName: optionalTextSchema,
-      bio: optionalTextSchema,
-      yearsExperience: optionalNonNegativeIntSchema,
-      languages: optionalLanguageArraySchema,
-      barLicenses: z.preprocess((value) => (Array.isArray(value) ? value : []), z.array(barLicenseSchema).default([])),
-      primaryEmail: optionalEmailSchema,
-      personalEmail: optionalEmailSchema,
-      directPhone: optionalTextSchema,
-      preferredContact: z.preprocess(
-        (value) => {
-          if (typeof value !== 'string') return undefined;
-          const trimmed = value.trim();
-          return CONTACT_VALUES.includes(trimmed as (typeof CONTACT_VALUES)[number]) ? trimmed : undefined;
-        },
-        z.enum(CONTACT_VALUES).optional(),
-      ),
-      officeAddress: officeAddressSchema.optional().default({}),
-      websiteUrl: optionalTextSchema,
-      assistantName: optionalTextSchema,
-      assistantEmail: optionalEmailSchema,
-      licensedStates: optionalStateCodeArraySchema,
-      primaryCity: optionalStateCodeSchema,
-      countiesCovered: optionalStringArraySchema,
-      federalCourts: optionalTextSchema,
-      primaryPracticeFocus: optionalTextSchema,
-      injuryCategories: optionalStringArraySchema,
-      exclusionaryCriteria: optionalStringArraySchema,
-    }).default({}),
-  ),
-  teamMembers: z.preprocess(
-    (value) => (Array.isArray(value) ? value.filter((item) => item && typeof item === 'object') : []),
-    z.array(teamMemberSchema).default([]),
-  ),
 });
+
+/* ── Mode: Publisher Account ── */
+
+const publisherProfileSchema = z
+  .object({
+    location: optionalText,
+    website_or_linkedin: optionalText,
+    contact_email: optionalEmail,
+    contact_phone: optionalText,
+    number_of_agents: optionalText,
+    languages: optionalStringArray,
+    operating_hours: optionalText,
+  })
+  .default({});
+
+const POSITION_VALUES = ['accounting', 'marketing', 'invoicing', 'intake_team', 'other'] as const;
+const SHIFT_VALUES = ['morning', 'afternoon', 'evening', 'full_day'] as const;
+
+const closerSchema = z.object({
+  contact_email: optionalEmail,
+  contact_phone: optionalText,
+  position: z
+    .preprocess(
+      (v: unknown) =>
+        typeof v === 'string' && (POSITION_VALUES as readonly string[]).includes(v.trim())
+          ? v.trim()
+          : 'intake_team',
+      z.enum(POSITION_VALUES),
+    )
+    .default('intake_team'),
+  position_other: optionalText,
+  shift_availability: z
+    .preprocess(
+      (v: unknown) =>
+        typeof v === 'string' && (SHIFT_VALUES as readonly string[]).includes(v.trim())
+          ? v.trim()
+          : 'full_day',
+      z.enum(SHIFT_VALUES),
+    )
+    .default('full_day'),
+});
+
+const publisherRequestSchema = z.object({
+  mode: z.literal('publisher'),
+  account: z.object({
+    center_id: z.string().uuid('A center must be selected'),
+    full_name: z.string().trim().min(1, 'Full name is required'),
+    email: z.string().email('Valid email required').transform((v: string) => v.toLowerCase().trim()),
+    password: z.string().min(8, 'Password must be at least 8 characters'),
+    role: z.enum(PUBLISHER_ROLES, { errorMap: () => ({ message: 'Role is required' }) }),
+  }),
+  profile: publisherProfileSchema.optional(),
+  closer: closerSchema.optional(),
+});
+
+const requestSchema = z
+  .discriminatedUnion('mode', [centerRequestSchema, publisherRequestSchema])
+  .superRefine((value, ctx: z.RefinementCtx) => {
+    if (value.mode !== 'publisher') return;
+
+    if (value.account.role === 'publisher_closer' && value.closer?.position === 'other' && !value.closer?.position_other) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['closer', 'position_other'],
+        message: 'Please specify the position when "Other" is selected',
+      });
+    }
+  });
 
 const rollbackCreatedUser = async (
   admin: ReturnType<typeof createClient>,
   userId: string,
 ) => {
+  try {
+    await admin.from('bpo_team_members').delete().eq('user_id', userId);
+  } catch (cleanupError) {
+    console.error('[onboard-bpo] bpo_team_members cleanup error:', cleanupError);
+  }
+
   try {
     await admin.from('app_users').delete().eq('user_id', userId);
   } catch (cleanupError) {
@@ -207,17 +153,6 @@ const rollbackCreatedUser = async (
   } catch (cleanupError) {
     console.error('[onboard-bpo] unexpected auth cleanup error:', cleanupError);
   }
-};
-
-const hasMeaningfulTeamMemberData = (member: Record<string, unknown>) => {
-  const fullName = typeof member.full_name === 'string' ? member.full_name.trim() : '';
-  const email = typeof member.email === 'string' ? member.email.trim() : '';
-  const phone = typeof member.phone === 'string' ? member.phone.trim() : '';
-  const state = typeof member.state === 'string' ? member.state.trim() : '';
-  const position = typeof member.position === 'string' ? member.position.trim() : '';
-  const positionOther = typeof member.position_other === 'string' ? member.position_other.trim() : '';
-
-  return Boolean(fullName || email || phone || state || positionOther || (position && position !== 'intake_team'));
 };
 
 serve(async (req) => {
@@ -237,43 +172,139 @@ serve(async (req) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    const payloadResult = onboardingRequestSchema.safeParse(await req.json());
+    const parsed = requestSchema.safeParse(await req.json());
 
-    if (!payloadResult.success) {
+    if (!parsed.success) {
       const fieldErrors = Object.fromEntries(
-        payloadResult.error.issues.map((issue) => [issue.path.join('.'), issue.message]),
+        parsed.error.issues.map((issue: z.ZodIssue) => [issue.path.join('.'), issue.message]),
       );
       return json({ error: 'Validation failed', fieldErrors }, 400);
     }
 
-    const { account, attorneyProfile: profile, teamMembers } = payloadResult.data;
-    const email = account.email;
-    const password = account.password;
+    /* ─────────────── Mode: Create BPO Center ─────────────── */
+
+    if (parsed.data.mode === 'center') {
+      const {
+        center_name,
+        location,
+        website_or_linkedin,
+        contact_email,
+        contact_phone,
+        number_of_agents,
+        languages,
+        operating_hours,
+      } = parsed.data.center;
+
+      const { data: existing, error: existingError } = await admin
+        .from('centers')
+        .select('id')
+        .eq('lead_vendor', center_name)
+        .maybeSingle();
+
+      if (existingError && existingError.code !== 'PGRST116') {
+        console.error('[onboard-bpo] center lookup error:', existingError);
+        return json({ error: existingError.message || 'Failed to check existing center' }, 500);
+      }
+
+      if (existing?.id) {
+        return json(
+          {
+            code: 'center_exists',
+            error: 'A center with this name already exists.',
+            fieldErrors: { 'center.center_name': 'Center name already in use' },
+          },
+          409,
+        );
+      }
+
+      const { data: insertData, error: insertError } = await admin
+        .from('centers')
+        .insert({
+          center_name,
+          lead_vendor: center_name,
+          location: location ?? null,
+          website_or_linkedin: website_or_linkedin ?? null,
+          contact_email: contact_email ?? null,
+          contact_phone: contact_phone ?? null,
+          number_of_agents: number_of_agents ?? null,
+          languages: languages ?? [],
+          operating_hours: operating_hours ?? null,
+          is_active: true,
+        })
+        .select('id, center_name, lead_vendor')
+        .single();
+
+      if (insertError) {
+        console.error('[onboard-bpo] center insert error:', insertError);
+
+        if (insertError.code === '23505') {
+          return json(
+            {
+              code: 'center_exists',
+              error: 'A center with this name already exists.',
+              fieldErrors: { 'center.center_name': 'Center name already in use' },
+            },
+            409,
+          );
+        }
+
+        return json({ error: `Failed to create center: ${insertError.message}` }, 500);
+      }
+
+      return json({
+        success: true,
+        mode: 'center',
+        centerId: insertData.id,
+        center: insertData,
+      });
+    }
+
+    /* ─────────────── Mode: Create Publisher Account ─────────────── */
+
+    const { account, closer } = parsed.data;
+
+    const { data: centerRow, error: centerError } = await admin
+      .from('centers')
+      .select('id, center_name')
+      .eq('id', account.center_id)
+      .maybeSingle();
+
+    if (centerError || !centerRow) {
+      return json(
+        {
+          error: 'Selected center could not be found.',
+          fieldErrors: { 'account.center_id': 'Invalid center' },
+        },
+        400,
+      );
+    }
 
     const { data: authData, error: authError } = await admin.auth.admin.createUser({
-      email,
-      password,
+      email: account.email,
+      password: account.password,
       email_confirm: true,
     });
 
     if (authError) {
-      return json({ error: authError.message, fieldErrors: { 'account.email': authError.message } }, 400);
+      return json(
+        { error: authError.message, fieldErrors: { 'account.email': authError.message } },
+        400,
+      );
     }
 
     const userId = authData.user.id;
 
-    const { error: appUserError } = await admin
-      .from('app_users')
-      .upsert(
-        {
-          user_id: userId,
-          email,
-          display_name: profile.fullName || null,
-          role: 'lawyer',
-          account_status: 'active',
-        },
-        { onConflict: 'user_id' },
-      );
+    const { error: appUserError } = await admin.from('app_users').upsert(
+      {
+        user_id: userId,
+        email: account.email,
+        display_name: account.full_name,
+        role: account.role,
+        center_id: account.center_id,
+        account_status: 'active',
+      },
+      { onConflict: 'user_id' },
+    );
 
     if (appUserError) {
       console.error('[onboard-bpo] app_users upsert error:', appUserError);
@@ -281,110 +312,67 @@ serve(async (req) => {
       return json({ error: `Failed to create app_users record: ${appUserError.message}` }, 500);
     }
 
-    const addr = profile.officeAddress || {};
-    const addressParts = [addr.street];
-    if (addr.suite) addressParts.push(addr.suite);
-    if (addr.city || addr.state || addr.zip) {
-      addressParts.push(`${addr.city || ''}, ${addr.state || ''} ${addr.zip || ''}`.trim());
-    }
-    const streetAddress = addressParts.filter(Boolean).join(', ');
-
-    const normalizedBarLicenses = profile.barLicenses
-      .map((license) => ({
-        state: license.state || '',
-        number: license.number || '',
-      }))
-      .filter((license) => license.state || license.number);
-    const barAssociationNumbers = normalizedBarLicenses
-      .filter((license) => license.number)
-      .map((license) => `${license.state}|${license.number}`);
-    const firstBarNumber = normalizedBarLicenses.find((license) => license.number)?.number ?? null;
-
-    const profilePayload: Record<string, unknown> = {
-      user_id: userId,
-      full_name: profile.fullName || null,
-      firm_name: profile.firmName || null,
-      professional_bio: profile.bio || null,
-      years_experience: profile.yearsExperience ?? null,
-      languages_spoken: profile.languages,
-      primary_email: profile.primaryEmail || email,
-      personal_email: profile.personalEmail || null,
-      direct_phone: profile.directPhone || null,
-      preferred_contact_method: profile.preferredContact || null,
-      office_address: streetAddress || null,
-      state: addr.state || null,
-      website_url: profile.websiteUrl || null,
-      assistant_name: profile.assistantName || null,
-      assistant_email: profile.assistantEmail || null,
-      bar_association_number: firstBarNumber,
-      bar_association_numbers: barAssociationNumbers,
-      licensed_states: profile.licensedStates,
-      primary_city: profile.primaryCity || null,
-      counties_covered: profile.countiesCovered,
-      federal_court_admissions: profile.federalCourts || null,
-      primary_practice_focus: profile.primaryPracticeFocus || null,
-      injury_categories: profile.injuryCategories,
-      exclusionary_criteria: profile.exclusionaryCriteria,
-      availability_status: 'accepting',
-    };
-
-    const { error: profileError } = await admin
-      .from('attorney_profiles')
-      .upsert(profilePayload, { onConflict: 'user_id' });
-
-    if (profileError) {
-      console.error('[onboard-bpo] attorney_profiles upsert error:', profileError);
-      await rollbackCreatedUser(admin, userId);
-      return json({ error: `Failed to create attorney profile: ${profileError.message}` }, 500);
-    }
-
-    const members = teamMembers.filter((member) =>
-      hasMeaningfulTeamMemberData(member as unknown as Record<string, unknown>),
-    );
-    const teamMemberIds: string[] = [];
     const warnings: string[] = [];
 
-    if (members.length > 0) {
-      await admin.from('team_members').delete().eq('lawyer_id', userId);
+    // Both publisher_admin and publisher_closer get a row in `bpo_team_members`
+    // so the admin's team-profile view (in mvabpoportal) shows the entire BPO
+    // team for the center in one query: `bpo_team_members WHERE center_id = X`.
+    // We never write to the legacy `team_members` table from BPO flows — that
+    // table is reserved for the lawyer onboarding system.
+    const closerData = {
+      contact_email: closer?.contact_email,
+      contact_phone: closer?.contact_phone,
+      position: closer?.position ?? ('intake_team' as const),
+      position_other: closer?.position_other,
+      shift_availability: closer?.shift_availability ?? ('full_day' as const),
+    };
 
-      for (const [index, member] of members.entries()) {
-        const { data: teamMemberData, error: teamMemberError } = await admin
-          .from('team_members')
-          .insert({
-            lawyer_id: userId,
-            full_name: member.full_name || null,
-            email: member.email || null,
-            phone: member.phone || null,
-            state: member.state || null,
-            position: member.position || 'intake_team',
-            position_other: member.position === 'other' ? member.position_other || null : null,
-            weekly_availability: member.weekly_availability || null,
-            holiday_hours: member.holiday_hours || [],
-            shift_availability: member.shift_availability || 'full_day',
-            publisher_id: null,
-          })
-          .select('id')
-          .single();
+    const teamMemberPayload: Record<string, unknown> = {
+      user_id: userId,
+      center_id: account.center_id,
+      full_name: account.full_name,
+      email: account.email,
+      phone: null,
+      position: 'intake_team',
+      position_other: null,
+      shift_availability: 'full_day',
+    };
 
-        if (teamMemberError) {
-          console.error('[onboard-bpo] team_member insert error:', teamMemberError);
-          warnings.push(
-            `Team member ${index + 1} could not be saved and can be added later from the lawyer profile.`,
-          );
-          continue;
-        }
+    if (account.role === 'publisher_closer') {
+      teamMemberPayload.email = closerData.contact_email ?? account.email;
+      teamMemberPayload.phone = closerData.contact_phone ?? null;
+      teamMemberPayload.position = closerData.position;
+      teamMemberPayload.position_other =
+        closerData.position === 'other' ? closerData.position_other ?? null : null;
+      teamMemberPayload.shift_availability = closerData.shift_availability;
+    }
 
-        if (teamMemberData?.id) {
-          teamMemberIds.push(String(teamMemberData.id));
-        }
-      }
+    const { error: teamMemberError } = await admin
+      .from('bpo_team_members')
+      .insert(teamMemberPayload);
+
+    if (teamMemberError) {
+      console.error('[onboard-bpo] bpo_team_members insert error:', teamMemberError);
+      await rollbackCreatedUser(admin, userId);
+      return json(
+        {
+          error: `Failed to create BPO team member entry: ${teamMemberError.message}`,
+          fieldErrors:
+            account.role === 'publisher_closer'
+              ? { closer: 'Team member entry could not be saved' }
+              : undefined,
+        },
+        500,
+      );
     }
 
     return json({
       success: true,
+      mode: 'publisher',
       userId,
-      email,
-      teamMemberIds,
+      email: account.email,
+      centerId: account.center_id,
+      role: account.role,
       warnings,
     });
   } catch (err) {
