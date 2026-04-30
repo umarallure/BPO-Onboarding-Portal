@@ -45,8 +45,6 @@ const optionalStringArray = z.preprocess(
   z.array(z.string()).default([]),
 );
 
-/* ── Mode: BPO Center ── */
-
 const centerRequestSchema = z.object({
   mode: z.literal('center'),
   center: z.object({
