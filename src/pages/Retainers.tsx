@@ -25,6 +25,7 @@ import {
   subWeeks,
 } from 'date-fns';
 import { usePipelineStages } from '@/hooks/usePipelineStages';
+import { BPO_ONBOARDING_STAGES } from '@/lib/bpoOnboardingStages';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -76,7 +77,6 @@ const Retainers = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { stages: coldCallStages } = usePipelineStages('cold_call_pipeline');
-  const { stages: lawyerPortalStages } = usePipelineStages('lawyer_portal');
   const { stages: submissionPortalStages } = usePipelineStages('submission_portal');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [leads, setLeads] = useState<LawyerLead[]>([]);
@@ -103,13 +103,13 @@ const Retainers = () => {
   const [itemsPerPage] = useState(10);
   const stageLabelById = useMemo(() => {
     const map = new Map<string, string>();
-    const allStages = [...coldCallStages, ...lawyerPortalStages, ...submissionPortalStages];
+    const allStages = [...coldCallStages, ...BPO_ONBOARDING_STAGES, ...submissionPortalStages];
     allStages.forEach((stage) => {
       map.set(stage.id, stage.label);
       map.set(stage.key, stage.label);
     });
     return map;
-  }, [coldCallStages, lawyerPortalStages, submissionPortalStages]);
+  }, [coldCallStages, submissionPortalStages]);
 
   useEffect(() => {
     if (!loading && !user) {

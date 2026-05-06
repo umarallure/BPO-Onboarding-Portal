@@ -58,11 +58,17 @@ export const getBpoPortalStageDisplayLabel = (label: string) => {
   const withoutPrefix = trimmed.replace(/^Stage\s+\d+\s*:\s*/i, "");
   const lower = withoutPrefix.toLowerCase();
 
-  if (lower === "ready to move forward") return "Material Shared";
-  if (lower.startsWith("retainer sent")) return "Document Signed";
-  if (lower.startsWith("retainer signed")) return "Group Chat Created";
-  if (lower.startsWith("onboarded")) return "Training";
-  if (lower.startsWith("active")) return "Active";
+  if (lower === "ready to move forward") return "Ready to Move Forward";
+  if (lower.startsWith("retainer sent")) return "Group Chat Created";
+  if (lower.startsWith("retainer signed")) return "Logins Sent";
+  if (lower === "scheduled onboarding") return "Scheduled Training";
+  if (lower === "scheduled training") return "Scheduled Training";
+  if (lower === "training") return "Training Ran";
+  if (lower === "training ran") return "Training Ran";
+  if (lower.startsWith("onboarded")) return "Training Ran";
+  if (lower === "training completed") return "Training Completed";
+  if (lower === "non-active bpo" || lower === "non active bpo") return "Non-Active BPO";
+  if (lower.startsWith("active")) return "Active BPO";
 
   return withoutPrefix;
 };

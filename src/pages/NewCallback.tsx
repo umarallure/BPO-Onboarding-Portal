@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatDateToEST } from "@/lib/dateUtils";
 import { useAuth } from "@/hooks/useAuth";
 import { usePipelineStages } from "@/hooks/usePipelineStages";
+import { BPO_ONBOARDING_STAGES } from "@/lib/bpoOnboardingStages";
 
 const NewCallback = () => {
   const navigate = useNavigate();
@@ -20,7 +21,11 @@ const NewCallback = () => {
   const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedPipeline, setSelectedPipeline] = useState<string>("cold_call_pipeline");
-  const { stages: portalStages, loading: stagesLoading } = usePipelineStages(selectedPipeline);
+  const { stages: sharedPortalStages, loading: sharedStagesLoading } = usePipelineStages(
+    selectedPipeline === "lawyer_portal" ? "cold_call_pipeline" : selectedPipeline
+  );
+  const portalStages = selectedPipeline === "lawyer_portal" ? BPO_ONBOARDING_STAGES : sharedPortalStages;
+  const stagesLoading = selectedPipeline === "lawyer_portal" ? false : sharedStagesLoading;
   const [lawyerFullName, setLawyerFullName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [email, setEmail] = useState("");

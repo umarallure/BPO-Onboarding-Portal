@@ -33,6 +33,8 @@ export const storageSupabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUB
 const ENABLE_DATALESS_PORTAL_MODE = true;
 const LOGIN_ALLOWED_TABLES = new Set([
   'app_users',
+  'bpo_onboarding_portal_stages',
+  'bpo_onboarding_portal_user_stages',
   'user_roles',
   'portal_stages',
   'lawyer_leads',

@@ -46,7 +46,7 @@ export function deriveParentStages(dbStages: PipelineStage[]): ParentStage[] {
 
   for (const s of dbStages) {
     const { parent, reason } = parseStageLabel(s.label);
-    const key = slugifyParent(parent);
+    const key = reason ? slugifyParent(parent) : s.key || slugifyParent(parent);
 
     if (!map.has(key)) {
       map.set(key, {
@@ -90,7 +90,7 @@ export function deriveParentKey(
   const matched = dbStages.find((s) => s.label === trimmed);
   if (matched) {
     const { parent } = parseStageLabel(matched.label);
-    return slugifyParent(parent);
+    return matched.key || slugifyParent(parent);
   }
 
   // Fallback: try parsing the status directly as a parent label
