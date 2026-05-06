@@ -59,6 +59,7 @@ type BpoAccountItem = AppUserRow & {
 const DASH_INPUT_CLASS =
   "h-10 border-[var(--dash-border)] bg-background/80 text-[13px] text-[var(--dash-text)] placeholder:text-[var(--dash-text-muted)]/55 backdrop-blur-sm focus:border-[#AE4010]/45 focus:ring-[#AE4010]/30";
 const DASH_SCROLLBAR_CLASS = "dash-scrollbar";
+const DEFAULT_BPO_PORTAL_URL = "https://publisher.accidentpayments.com";
 
 function SectionCard({
   icon,
@@ -161,7 +162,7 @@ const getFunctionErrorMessage = async (error: unknown, fallback: string) => {
 
 const BpoManagementPage = () => {
   const { toast } = useToast();
-  const bpoPortalUrl = import.meta.env.VITE_BPO_PORTAL_URL?.trim() || undefined;
+  const bpoPortalUrl = import.meta.env.VITE_BPO_PORTAL_URL?.trim() || DEFAULT_BPO_PORTAL_URL;
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

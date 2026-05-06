@@ -2,8 +2,10 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.56.0'
 
 const VERCEL_BPO_ONBOARDING_PORTAL_URL = 'https://bpo-onboarding-portal.vercel.app'
 const PUBLISHER_PORTAL_URL = 'https://publisher.accidentpayments.com'
-const LEGACY_BPO_PORTAL_URL = 'https://bpo.accidentpayments.com'
 const DEFAULT_BPO_PORTAL_URL = PUBLISHER_PORTAL_URL
+
+const ALLOWED_BPO_PORTAL_ORIGINS = [PUBLISHER_PORTAL_URL] as const
+
 const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:3000',
   'http://localhost:8080',
@@ -15,20 +17,11 @@ const DEFAULT_ALLOWED_ORIGINS = [
   'http://127.0.0.1:4173',
   'https://onboarding.accidentpayments.com',
   VERCEL_BPO_ONBOARDING_PORTAL_URL,
-  'https://attorney.accidentpayments.com',
   PUBLISHER_PORTAL_URL,
-  LEGACY_BPO_PORTAL_URL,
 ]
 
-type AppUserRole =
-  | 'super_admin'
-  | 'admin'
-  | 'lawyer'
-  | 'agent'
-  | 'accounts'
-  | 'publisher_admin'
-  | 'publisher_closer'
-  | 'broker'
+const BPO_ACCOUNT_ROLES = ['publisher_admin', 'publisher_closer'] as const
+type BpoAccountRole = (typeof BPO_ACCOUNT_ROLES)[number]
 
 type AuthedUser = {
   id: string
@@ -39,9 +32,8 @@ type AppUserLookup = {
   user_id: string
   email: string | null
   display_name: string | null
-  role: AppUserRole | null
+  role: string | null
   center_id?: string | null
-  is_super_admin?: boolean | null
   account_status?: string | null
 }
 
@@ -52,9 +44,6 @@ type CenterLookup = {
   is_active: boolean | null
 }
 
-const LAWYER_ACCOUNT_ROLES = ['lawyer'] as const
-const BPO_ACCOUNT_ROLES = ['publisher_admin', 'publisher_closer'] as const
-
 const getEnv = (key: string, fallback?: string) => {
   const value = Deno.env.get(key)?.trim()
   if (value) return value
@@ -64,12 +53,14 @@ const getEnv = (key: string, fallback?: string) => {
 
 const getAllowedOrigins = () => {
   const configured = Deno.env.get('ALLOWED_PORTAL_ORIGINS')
-  if (!configured?.trim()) return DEFAULT_ALLOWED_ORIGINS
+  const configuredOrigins = configured?.trim()
+    ? configured
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean)
+    : []
 
-  return configured
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean)
+  return Array.from(new Set([...DEFAULT_ALLOWED_ORIGINS, ...configuredOrigins]))
 }
 
 const getAllowedRequestOrigin = (req: Request) => {
@@ -120,7 +111,7 @@ const isLocalRequest = (req: Request) => {
   }
 }
 
-const normalizePortalUrl = (value: unknown, options?: { allowLocal?: boolean }) => {
+const normalizeBpoPortalUrl = (value: unknown, options?: { allowLocal?: boolean }) => {
   if (typeof value !== 'string') return null
 
   const trimmed = value.trim()
@@ -130,12 +121,7 @@ const normalizePortalUrl = (value: unknown, options?: { allowLocal?: boolean }) 
     const parsed = new URL(trimmed)
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null
 
-    if (
-      parsed.origin === DEFAULT_ATTORNEY_PORTAL_URL ||
-      parsed.origin === DEFAULT_BPO_PORTAL_URL ||
-      parsed.origin === PUBLISHER_PORTAL_URL ||
-      parsed.origin === LEGACY_BPO_PORTAL_URL
-    ) {
+    if (ALLOWED_BPO_PORTAL_ORIGINS.includes(parsed.origin as (typeof ALLOWED_BPO_PORTAL_ORIGINS)[number])) {
       return parsed.origin
     }
 
@@ -265,32 +251,27 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json().catch(() => ({}))
-    const lawyerUserId = typeof body?.lawyer_user_id === 'string' ? body.lawyer_user_id.trim() : ''
     const bpoUserId = typeof body?.bpo_user_id === 'string' ? body.bpo_user_id.trim() : ''
-    const launchMode = bpoUserId ? 'bpo' : 'lawyer'
-    const launchUserId = bpoUserId || lawyerUserId
     const requestedPath = sanitizeRequestedPath(body?.requested_path)
     const allowLocalPortalUrl = isLocalRequest(req)
-    const defaultPortalUrl = launchMode === 'bpo' ? DEFAULT_BPO_PORTAL_URL : DEFAULT_ATTORNEY_PORTAL_URL
-    const configuredPortalUrl = normalizePortalUrl(
-      getEnv(launchMode === 'bpo' ? 'BPO_PORTAL_URL' : 'ATTORNEY_PORTAL_URL', defaultPortalUrl),
-      { allowLocal: allowLocalPortalUrl }
+
+    const configuredPortalUrl = normalizeBpoPortalUrl(
+      getEnv('BPO_PORTAL_URL', DEFAULT_BPO_PORTAL_URL),
+      { allowLocal: allowLocalPortalUrl },
     )
     const requestedPortalUrl = allowLocalPortalUrl
-      ? normalizePortalUrl(launchMode === 'bpo' ? body?.bpo_portal_url : body?.attorney_portal_url, {
-          allowLocal: true,
-        })
+      ? normalizeBpoPortalUrl(body?.bpo_portal_url, { allowLocal: true })
       : null
-    const portalUrl = requestedPortalUrl ?? configuredPortalUrl ?? defaultPortalUrl
+    const portalUrl = requestedPortalUrl ?? configuredPortalUrl ?? DEFAULT_BPO_PORTAL_URL
 
-    if (!launchUserId) {
-      return json(req, 400, { error: 'bpo_user_id or lawyer_user_id is required' })
+    if (!bpoUserId) {
+      return json(req, 400, { error: 'bpo_user_id is required' })
     }
 
     const { data: accountRow, error: accountError } = await adminClient
       .from('app_users')
       .select('user_id,email,display_name,role,center_id,account_status')
-      .eq('user_id', launchUserId)
+      .eq('user_id', bpoUserId)
       .maybeSingle()
 
     if (accountError) {
@@ -298,75 +279,67 @@ Deno.serve(async (req) => {
     }
 
     const account = accountRow as AppUserLookup | null
-    const accountLabel = launchMode === 'bpo' ? 'BPO' : 'Lawyer'
     const hasAllowedAccountRole = Boolean(
-      account &&
-        (launchMode === 'bpo'
-          ? BPO_ACCOUNT_ROLES.includes(account.role as (typeof BPO_ACCOUNT_ROLES)[number])
-          : LAWYER_ACCOUNT_ROLES.includes(account.role as (typeof LAWYER_ACCOUNT_ROLES)[number])),
+      account && BPO_ACCOUNT_ROLES.includes(account.role as BpoAccountRole),
     )
 
     if (!account || !hasAllowedAccountRole) {
-      return json(req, 404, { error: `${accountLabel} account not found` })
+      return json(req, 404, { error: 'BPO account not found' })
     }
 
     if (!isPortalAccountLaunchable(account.account_status)) {
-      return json(req, 400, { error: `This ${accountLabel.toLowerCase()} account is not active and cannot be launched` })
+      return json(req, 400, { error: 'This BPO account is not active and cannot be launched' })
     }
 
-    let bpoCenter: CenterLookup | null = null
-
-    if (launchMode === 'bpo') {
-      if (!account.center_id) {
-        return json(req, 400, { error: 'This BPO account is not linked to a center and cannot be launched' })
-      }
-
-      const { data: centerRow, error: centerError } = await adminClient
-        .from('centers')
-        .select('id,center_name,lead_vendor,is_active')
-        .eq('id', account.center_id)
-        .maybeSingle()
-
-      if (centerError) {
-        return json(req, 500, { error: centerError.message })
-      }
-
-      bpoCenter = centerRow as CenterLookup | null
-
-      if (!bpoCenter) {
-        return json(req, 404, { error: 'BPO center not found' })
-      }
-
-      if (bpoCenter.is_active === false) {
-        return json(req, 400, { error: 'This BPO center is inactive and cannot be launched' })
-      }
+    if (!account.center_id) {
+      return json(req, 400, { error: 'This BPO account is not linked to a center and cannot be launched' })
     }
 
-    const { data: authUserData, error: authUserError } = await adminClient.auth.admin.getUserById(launchUserId)
+    const { data: centerRow, error: centerError } = await adminClient
+      .from('centers')
+      .select('id,center_name,lead_vendor,is_active')
+      .eq('id', account.center_id)
+      .maybeSingle()
+
+    if (centerError) {
+      return json(req, 500, { error: centerError.message })
+    }
+
+    const bpoCenter = centerRow as CenterLookup | null
+
+    if (!bpoCenter) {
+      return json(req, 404, { error: 'BPO center not found' })
+    }
+
+    if (bpoCenter.is_active === false) {
+      return json(req, 400, { error: 'This BPO center is inactive and cannot be launched' })
+    }
+
+    const { data: authUserData, error: authUserError } = await adminClient.auth.admin.getUserById(bpoUserId)
     if (authUserError) {
       return json(req, 500, { error: authUserError.message })
     }
 
     const authUser = authUserData.user
     if (!authUser) {
-      return json(req, 404, { error: `${accountLabel} auth account not found` })
+      return json(req, 404, { error: 'BPO auth account not found' })
     }
 
     const accountEmail = authUser.email?.trim().toLowerCase() ?? ''
     if (!accountEmail) {
-      return json(req, 400, { error: `The selected ${accountLabel.toLowerCase()} auth account does not have a valid email address` })
+      return json(req, 400, { error: 'The selected BPO auth account does not have a valid email address' })
     }
 
     const appUserEmail = account.email?.trim().toLowerCase() ?? ''
     if (appUserEmail && appUserEmail !== accountEmail) {
       return json(req, 409, {
-        error: `${accountLabel} account email is out of sync with auth. Please sync the account email before launching.`,
+        error: 'BPO account email is out of sync with auth. Please sync the account email before launching.',
       })
     }
 
     const bannedUntil = typeof authUser.banned_until === 'string' ? Date.parse(authUser.banned_until) : Number.NaN
     if (Number.isFinite(bannedUntil) && bannedUntil > Date.now()) {
-      return json(req, 400, { error: `This ${accountLabel.toLowerCase()} auth account is currently banned and cannot be launched` })
+      return json(req, 400, { error: 'This BPO auth account is currently banned and cannot be launched' })
     }
 
     const redirectUrl = new URL('/launch-auth', portalUrl)
@@ -387,37 +360,20 @@ Deno.serve(async (req) => {
     return json(req, 200, {
       actionLink: generateData.properties.action_link,
       redirectTo: redirectUrl.toString(),
-      account: {
+      bpo: {
         userId: account.user_id,
         email: accountEmail,
         displayName: account.display_name,
         role: account.role,
         centerId: account.center_id ?? null,
-        type: launchMode,
+        center: bpoCenter
+          ? {
+              id: bpoCenter.id,
+              name: bpoCenter.center_name || bpoCenter.lead_vendor,
+              isActive: true,
+            }
+          : null,
       },
-      ...(launchMode === 'lawyer'
-        ? {
-            lawyer: {
-              userId: account.user_id,
-              email: accountEmail,
-              displayName: account.display_name,
-            },
-          }
-        : {
-            bpo: {
-              userId: account.user_id,
-              email: accountEmail,
-              displayName: account.display_name,
-              centerId: account.center_id ?? null,
-              center: bpoCenter
-                ? {
-                    id: bpoCenter.id,
-                    name: bpoCenter.center_name || bpoCenter.lead_vendor,
-                    isActive: bpoCenter.is_active !== false,
-                  }
-                : null,
-            },
-          }),
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unexpected error'
