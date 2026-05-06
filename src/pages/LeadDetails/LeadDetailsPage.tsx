@@ -121,7 +121,7 @@ const LeadDetailsPage = () => {
 
       if (error) {
         toast({
-          title: "Failed to load BPO contact",
+          title: "Failed to load lead",
           description: error.message,
           variant: "destructive",
         });
@@ -132,8 +132,8 @@ const LeadDetailsPage = () => {
 
       if (!data) {
         toast({
-          title: "BPO contact not found",
-          description: `No BPO contact found for submission ID ${submissionId}`,
+          title: "Lead not found",
+          description: `No lead found for submission ID ${submissionId}`,
           variant: "destructive",
         });
         setLead(null);
@@ -149,7 +149,7 @@ const LeadDetailsPage = () => {
         data.additional_notes
           ? [
               {
-                source: "BPO Contacts",
+                source: "Lead details",
                 note: String(data.additional_notes).trim(),
                 timestamp: data.updated_at || data.created_at || null,
               },
@@ -193,8 +193,8 @@ const LeadDetailsPage = () => {
   };
 
   const headerTitle = useMemo(() => {
-    if (!lead) return "BPO Contact Details";
-    const name = lead.customer_full_name ? String(lead.customer_full_name) : "BPO Contact";
+    if (!lead) return "Lead Details";
+    const name = lead.customer_full_name ? String(lead.customer_full_name) : "Lead";
     const vendor = lead.lead_vendor ? ` - ${lead.lead_vendor}` : "";
     return `${name}${vendor}`;
   }, [lead]);
@@ -216,7 +216,7 @@ const LeadDetailsPage = () => {
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Loading BPO contact details...
+          Loading lead details...
         </div>
       ) : !lead ? (
         <Card>

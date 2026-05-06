@@ -10,14 +10,12 @@ import { AgentActivityDashboard } from "@/components/AgentActivityDashboard";
 import ReportsPage from "./pages/Reports";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
-import Leads from "./pages/Leads";
 import CenterLeadPortal from "./pages/CenterLeadPortal";
 import CenterCalendarView from "./pages/CenterCalendarView";
 import CallbackRequestPage from "./pages/CallbackRequestPage";
 import CommissionPortal from "./pages/CommissionPortal";
 import CallResultUpdate from "./pages/CallResultUpdate";
 import CallResultJourney from "./pages/CallResultJourney";
-import NewCallback from "./pages/NewCallback";
 import NewBpo from "./pages/NewBpo";
 import DailyDealFlowPage from "./pages/DailyDealFlow/DailyDealFlowPage";
 import BpoLeadDetailsPage from "@/pages/BpoLeadDetailsPage";
@@ -62,7 +60,7 @@ const AuthAwareFallbackRoute = () => {
 
   if (loading) return <LogoLoader fullscreen label="Loading..." />;
 
-  return <Navigate to={user ? "/leads" : "/auth"} replace />;
+  return <Navigate to={user ? "/manager-dashboard" : "/auth"} replace />;
 };
 
 const App = () => (
@@ -81,7 +79,7 @@ const App = () => (
               path="/dashboard" 
               element={
                 <ProtectedRoute>
-                  <Navigate to="/leads" replace />
+                  <Navigate to="/manager-dashboard" replace />
                 </ProtectedRoute>
               } 
             />
@@ -90,9 +88,7 @@ const App = () => (
               path="/leads" 
               element={
                 <ProtectedRoute>
-                  <AppShell title="BPO Contacts">
-                    <Leads />
-                  </AppShell>
+                  <Navigate to="/transfer-portal" replace />
                 </ProtectedRoute>
               } 
             />
@@ -324,9 +320,7 @@ const App = () => (
               path="/add-lead" 
               element={
                 <ProtectedRoute>
-                  <AppShell title="Add BPO Contact">
-                    <NewCallback />
-                  </AppShell>
+                  <Navigate to="/add-bpo" replace />
                 </ProtectedRoute>
               } 
             />
@@ -358,7 +352,7 @@ const App = () => (
               path="/leads/:submissionId" 
               element={
                 <ProtectedRoute>
-                  <AppShell title="BPO Contact Details">
+                  <AppShell title="Lead Details">
                     <LeadDetailsPage />
                   </AppShell>
                 </ProtectedRoute>

@@ -226,12 +226,6 @@ const AppShell = ({
         icon: <Package className="h-4 w-4 text-current" />,
       },
       {
-        label: 'BPO Contacts',
-        to: '/leads',
-        icon: <Users className="h-4 w-4 text-current" />,
-        end: true,
-      },
-      {
         label: 'Marketing Opportunities',
         to: '/transfer-portal',
         icon: <Eye className="h-4 w-4 text-current" />,

@@ -990,7 +990,7 @@ const TransferPortalPage = () => {
                   <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
                   Refresh
                 </Button>
-                <Button size="sm" onClick={() => navigate('/add-lead')} variant="default">
+                <Button size="sm" onClick={() => navigate('/add-bpo')} variant="default">
                   <Plus className="mr-2 h-4 w-4" />
                   Add BPO
                 </Button>
