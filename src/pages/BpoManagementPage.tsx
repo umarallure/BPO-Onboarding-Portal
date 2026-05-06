@@ -144,6 +144,21 @@ const formatOptional = (value: string | null | undefined) => {
   return trimmed || "Not set";
 };
 
+const getFunctionErrorMessage = async (error: unknown, fallback: string) => {
+  const context = (error as { context?: { json?: () => Promise<unknown> } } | null)?.context;
+
+  try {
+    const body = await context?.json?.();
+    const message = (body as { error?: unknown } | null)?.error;
+    if (typeof message === "string" && message.trim()) return message.trim();
+  } catch {
+    // Fall back to the wrapped Supabase function error below.
+  }
+
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+};
+
 const BpoManagementPage = () => {
   const { toast } = useToast();
   const bpoPortalUrl = import.meta.env.VITE_BPO_PORTAL_URL?.trim() || undefined;
@@ -428,7 +443,7 @@ const BpoManagementPage = () => {
       });
 
       if (fnError) {
-        throw new Error(fnError.message || "Failed to create BPO portal launch");
+        throw new Error(await getFunctionErrorMessage(fnError, "Failed to create BPO portal launch"));
       }
 
       if (!data?.actionLink || typeof data.actionLink !== "string") {

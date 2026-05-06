@@ -21,21 +21,20 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { useBpoOnboardingStages } from "@/hooks/useBpoOnboardingStages";
 import { supabase } from "@/integrations/supabase/client";
 import { RefreshCw, Pencil, StickyNote, SlidersHorizontal, X } from "lucide-react";
 import LogoLoader from "@/components/LogoLoader";
-import { useNavigate } from "react-router-dom";
-import { useAttorneys } from "@/hooks/useAttorneys";
-import { usePipelineStages, type PipelineStage } from "@/hooks/usePipelineStages";
-import { useAuth } from "@/hooks/useAuth";
-import { useMarketingTeamFilterAccess } from "@/hooks/useMarketingTeamFilterAccess";
 import {
   parseStageLabel,
   deriveParentStages,
   buildStatusLabel,
-  type ParentStage,
 } from "@/lib/stageUtils";
-import { getBpoPortalStageDisplayLabel } from "@/lib/bpo";
+import { BPO_USER_ROLES, formatBpoRoleLabel, getBpoPortalStageDisplayLabel } from "@/lib/bpo";
+import {
+  BPO_ONBOARDING_PORTAL_PIPELINE,
+  getPublisherFrontendStageKey,
+} from "@/lib/bpoOnboardingStages";
 import {
   addDays,
   endOfMonth,
@@ -128,16 +127,11 @@ interface CallLog {
 }
 
 const SubmissionPortalPage = () => {
-  const navigate = useNavigate();
-  const { user } = useAuth();
   const {
-    marketingTeam,
-    canViewTeamAssigneeFilter,
-    loading: marketingFilterAccessLoading,
-  } = useMarketingTeamFilterAccess(user?.id);
-
-  // --- Dynamic pipeline stages from DB ---
-  const { stages: dbSubmissionStages, loading: stagesLoading } = usePipelineStages("lawyer_portal");
+    stages: dbSubmissionStages,
+    loading: stagesLoading,
+    error: stagesError,
+  } = useBpoOnboardingStages();
 
   // --- Derive parent stages (kanban columns) from flat DB stages ---
   const parentStages = useMemo(() => deriveParentStages(dbSubmissionStages), [dbSubmissionStages]);
@@ -198,17 +192,6 @@ const SubmissionPortalPage = () => {
     }
   };
 
-  const getStatusForStage = (stageKey: string) => {
-    return stageKey;
-  };
-
-  const buildAllowedStatuses = () => {
-    // Include all full DB stage labels (with reasons) + parent-only labels
-    const fullLabels = dbSubmissionStages.map((s) => s.label);
-    const parentLabels = parentStages.map((s) => s.label);
-    return Array.from(new Set([...fullLabels, ...parentLabels]));
-  };
-
   const [data, setData] = useState<SubmissionPortalRow[]>([]);
   const [filteredData, setFilteredData] = useState<SubmissionPortalRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -223,69 +206,40 @@ const SubmissionPortalPage = () => {
   const [searchDropdownOpen, setSearchDropdownOpen] = useState(false);
   const searchDropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const [showDuplicates, setShowDuplicates] = useState(true);
-  const [dataCompletenessFilter, setDataCompletenessFilter] = useState("__ALL__");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
   const [columnPage, setColumnPage] = useState<Record<string, number>>({});
   const [noteCounts, setNoteCounts] = useState<Record<string, number>>({});
 
-  const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
-  const [didInitAssigneeFilter, setDidInitAssigneeFilter] = useState(false);
-
   const [editOpen, setEditOpen] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
   const [editRow, setEditRow] = useState<SubmissionPortalRow | null>(null);
-  const [editPipeline, setEditPipeline] = useState<string>("lawyer_portal");
   const [editStage, setEditStage] = useState("");
   const [editReason, setEditReason] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editStageOpen, setEditStageOpen] = useState(false);
 
   const { toast } = useToast();
-  const { attorneys } = useAttorneys();
 
-  const attorneyById = useMemo(() => {
-    const map: Record<string, string> = {};
-    (attorneys || []).forEach((a) => {
-      if (!a.user_id) return;
-      const label = (a.full_name || a.primary_email || "").trim();
-      if (!label) return;
-      map[a.user_id] = label;
+  useEffect(() => {
+    if (!stagesError) return;
+    toast({
+      title: "BPO Stages Unavailable",
+      description: "Run the BPO onboarding stages migration before using this board.",
+      variant: "destructive",
     });
-    return map;
-  }, [attorneys]);
+  }, [stagesError, toast]);
 
-  // Remove duplicates based on insured_name, client_phone_number, and lead_vendor
-  const removeDuplicates = useCallback((records: SubmissionPortalRow[]): SubmissionPortalRow[] => {
-    const seen = new Map<string, SubmissionPortalRow>();
-    
-    records.forEach(record => {
-      const key = `${record.insured_name || ''}|${record.client_phone_number || ''}|${record.lead_vendor || ''}`;
-      
-      // Keep the most recent record (first in our sorted array)
-      if (!seen.has(key)) {
-        seen.set(key, record);
-      }
-    });
-    
-    return Array.from(seen.values());
-  }, []);
-
-  // Apply filters and duplicate removal
+  // Apply filters
   const applyFilters = useCallback((records: SubmissionPortalRow[]): SubmissionPortalRow[] => {
     let filtered = records;
-
-    if (assigneeFilter !== '__ALL__' && assigneeFilter !== 'all') {
-      filtered = filtered.filter((record) => (record.assigned_user_id || '') === assigneeFilter);
-    }
 
     // Apply status filter
     if (statusFilter !== "__ALL__") {
       filtered = filtered.filter((record) => (record.status || '') === statusFilter);
     }
 
-    // Apply lead vendor filter
+    // Apply company filter
     if (leadVendorFilter !== "__ALL__") {
       filtered = filtered.filter((record) => (record.lead_vendor || '') === leadVendorFilter);
     }
@@ -305,25 +259,8 @@ const SubmissionPortalPage = () => {
       );
     }
 
-    // Remove duplicates if enabled
-    if (!showDuplicates) filtered = removeDuplicates(filtered);
-
-    // Apply data completeness filter
-    // dataCompletenessFilter is based on the old merged submission_portal flow.
-    // lawyer_leads rows do not include those fields, so keep behavior as a no-op.
-
     return filtered;
-  }, [assigneeFilter, leadVendorFilter, removeDuplicates, searchTerm, showDuplicates, statusFilter]);
-
-  useEffect(() => {
-    if (!user?.id) return;
-    if (didInitAssigneeFilter) return;
-    if (marketingFilterAccessLoading) return;
-    if (!canViewTeamAssigneeFilter) {
-      setAssigneeFilter(user.id);
-    }
-    setDidInitAssigneeFilter(true);
-  }, [canViewTeamAssigneeFilter, didInitAssigneeFilter, marketingFilterAccessLoading, user?.id]);
+  }, [leadVendorFilter, searchTerm, statusFilter]);
 
   const leadVendorOptions = useMemo(() => {
     const set = new Set<string>();
@@ -334,12 +271,10 @@ const SubmissionPortalPage = () => {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [data]);
 
-  const defaultAssigneeFilter = canViewTeamAssigneeFilter ? "all" : (user?.id || "all");
   const hasActiveFilters =
     searchTerm.trim().length > 0 ||
     leadVendorFilter !== "__ALL__" ||
     statusFilter !== "__ALL__" ||
-    assigneeFilter !== defaultAssigneeFilter ||
     timeRange !== "all_time" ||
     customStartDate.length > 0 ||
     customEndDate.length > 0;
@@ -348,7 +283,6 @@ const SubmissionPortalPage = () => {
     setSearchTerm("");
     setLeadVendorFilter("__ALL__");
     setStatusFilter("__ALL__");
-    setAssigneeFilter(defaultAssigneeFilter);
     setTimeRange("all_time");
     setCustomStartDate("");
     setCustomEndDate("");
@@ -491,19 +425,17 @@ const SubmissionPortalPage = () => {
     try {
       setRefreshing(true);
 
-      type LeadsQueryRes = { data: unknown[] | null; error: { message?: string } | null };
-      type LeadsQuery = PromiseLike<LeadsQueryRes> & {
-        gte: (column: string, value: string) => LeadsQuery;
-        lt: (column: string, value: string) => LeadsQuery;
-        in: (column: string, values: string[]) => LeadsQuery;
-        order: (column: string, opts: { ascending: boolean }) => LeadsQuery;
+      type QueryRes = { data: unknown[] | null; error: { message?: string } | null };
+      type AppUsersQuery = PromiseLike<QueryRes> & {
+        eq: (column: string, value: string | boolean) => AppUsersQuery;
+        gte: (column: string, value: string) => AppUsersQuery;
+        lt: (column: string, value: string) => AppUsersQuery;
+        in: (column: string, values: readonly string[]) => AppUsersQuery;
+        order: (column: string, opts: { ascending: boolean }) => AppUsersQuery;
       };
       const sb = supabase as unknown as {
         from: (table: string) => {
-          select: (columns: string) => {
-            eq: (column: string, value: string) => LeadsQuery;
-            in: (column: string, values: string[]) => LeadsQuery;
-          };
+          select: (columns: string) => AppUsersQuery;
         };
       };
 
@@ -531,69 +463,123 @@ const SubmissionPortalPage = () => {
 
       const range = resolveDateRange();
 
-      let lawyerPortalQ = sb
-        .from("lawyer_leads")
-        .select("id,submission_id,lawyer_full_name,firm_name,phone_number,stage_id,submission_date,created_at,additional_notes,assigned_user_id,pipeline_name")
-        .eq("pipeline_name", "lawyer_portal");
+      let publisherQ = sb
+        .from("app_users")
+        .select("user_id,email,display_name,role,center_id,account_status,created_at,updated_at")
+        .in("role", BPO_USER_ROLES);
 
       if (range) {
-        lawyerPortalQ = lawyerPortalQ.gte("created_at", range.startIso).lt("created_at", range.endExclusiveIso);
+        publisherQ = publisherQ.gte("created_at", range.startIso).lt("created_at", range.endExclusiveIso);
       }
 
-      lawyerPortalQ = lawyerPortalQ.order("created_at", { ascending: false });
+      publisherQ = publisherQ.order("created_at", { ascending: false });
 
-      const lawyerPortalRes = await lawyerPortalQ;
+      const [publisherRes, centersRes, stagePositionsRes] = await Promise.all([
+        publisherQ,
+        sb
+          .from("centers")
+          .select("id,center_name,lead_vendor,contact_email,contact_phone,is_active,created_at,updated_at")
+          .order("center_name", { ascending: true }),
+        sb
+          .from("bpo_onboarding_portal_user_stages")
+          .select("user_id,stage_key,notes,updated_at,updated_by"),
+      ]);
 
-      if (lawyerPortalRes.error) {
-        console.error('Error fetching lawyer portal leads:', lawyerPortalRes.error);
+      if (publisherRes.error) {
+        console.error('Error fetching BPO publisher accounts:', publisherRes.error);
         toast({
           title: 'Error',
-          description: 'Failed to fetch lawyer portal data',
+          description: 'Failed to fetch BPO publisher accounts',
           variant: 'destructive',
         });
         return;
       }
+      if (centersRes.error) {
+        console.warn('BPO center details unavailable; loading publisher accounts without center names:', centersRes.error);
+        toast({
+          title: 'Center Details Unavailable',
+          description: 'Publisher accounts loaded without BPO company details.',
+        });
+      }
+      if (stagePositionsRes.error) {
+        console.warn('BPO stage positions unavailable; loading publisher accounts with inferred stages:', stagePositionsRes.error);
+        toast({
+          title: 'Stage Tracking Unavailable',
+          description: 'Publisher accounts loaded with inferred board stages.',
+        });
+      }
 
-      const leadsRaw = lawyerPortalRes.data;
-
-      const leads = ((leadsRaw ?? []) as unknown as Array<{
-        id: string;
-        submission_id: string;
-        pipeline_name?: string | null;
-        lawyer_full_name: string | null;
-        firm_name: string | null;
-        phone_number: string | null;
-        stage_id: string | null;
-        submission_date: string | null;
+      const publishers = ((publisherRes.data ?? []) as unknown as Array<{
+        user_id: string;
+        email: string | null;
+        display_name: string | null;
+        role: string | null;
+        center_id: string | null;
+        account_status: string | null;
         created_at: string | null;
-        additional_notes: string | null;
-        assigned_user_id?: string | null;
+        updated_at: string | null;
       }>);
+      const centers = ((centersRes.error ? [] : centersRes.data ?? []) as unknown as Array<{
+        id: string;
+        center_name: string | null;
+        lead_vendor: string | null;
+        contact_email: string | null;
+        contact_phone: string | null;
+        is_active: boolean | null;
+        created_at: string | null;
+        updated_at: string | null;
+      }>);
+      const centerById = new Map(centers.map((center) => [center.id, center]));
+      const stagePositions = ((stagePositionsRes.error ? [] : stagePositionsRes.data ?? []) as unknown as Array<{
+        user_id: string;
+        stage_key: string | null;
+        notes: string | null;
+        updated_at: string | null;
+        updated_by: string | null;
+      }>);
+      const stagePositionByUserId = new Map(stagePositions.map((row) => [row.user_id, row]));
 
-      const mapped: SubmissionPortalRow[] = leads.map((l) => {
-        const lawyerStageLabel = dbSubmissionStages.find((s) => s.key === (l.stage_id || ''))?.label ||
-          dbSubmissionStages.find((s) => s.id === (l.stage_id || ''))?.label ||
-          undefined;
+      const mapped: SubmissionPortalRow[] = publishers.map((publisher) => {
+        const persistedPosition = stagePositionByUserId.get(publisher.user_id);
+        const persistedStageKey = (persistedPosition?.stage_key || '').trim();
+        const inferredStageKey = getPublisherFrontendStageKey(publisher.account_status);
+        const stageKey = dbSubmissionStages.some((stage) => stage.key === persistedStageKey)
+          ? persistedStageKey
+          : dbSubmissionStages.some((stage) => stage.key === inferredStageKey)
+            ? inferredStageKey
+            : dbSubmissionStages[0]?.key ?? '';
+        const stageLabel = dbSubmissionStages.find((s) => s.key === stageKey)?.label ?? dbSubmissionStages[0]?.label;
+        const center = publisher.center_id ? centerById.get(publisher.center_id) : null;
+        const displayName = (publisher.display_name || '').trim() || publisher.email || 'Unnamed publisher';
+        const companyName = center?.center_name || center?.lead_vendor || 'No BPO assigned';
+        const roleLabel = formatBpoRoleLabel(publisher.role);
+        const accountStatus = String(publisher.account_status || '').trim() || 'Not set';
+        const notes = (persistedPosition?.notes || '').trim()
+          || (center?.is_active === false ? 'Center inactive' : undefined);
 
         return {
-          id: l.id,
-          submission_id: l.submission_id,
-          pipeline_name: l.pipeline_name ?? 'lawyer_portal',
-          insured_name: l.lawyer_full_name ?? undefined,
-          client_phone_number: l.phone_number ?? undefined,
-          lead_vendor: l.firm_name ?? undefined,
-          stage_id: l.stage_id,
-          assigned_user_id: l.assigned_user_id ?? null,
-          status: lawyerStageLabel,
-          submission_date: l.submission_date ?? undefined,
-          created_at: l.created_at ?? undefined,
-          notes: l.additional_notes ?? undefined,
-          date: (l.submission_date || l.created_at || '').slice(0, 10) || undefined,
+          id: publisher.user_id,
+          submission_id: publisher.user_id,
+          pipeline_name: BPO_ONBOARDING_PORTAL_PIPELINE,
+          display_stage_key: stageKey,
+          insured_name: displayName,
+          client_phone_number: center?.contact_phone || center?.contact_email || publisher.email || undefined,
+          lead_vendor: companyName,
+          stage_id: stageKey,
+          assigned_user_id: null,
+          status: stageLabel,
+          submission_date: publisher.created_at ?? undefined,
+          created_at: publisher.created_at ?? undefined,
+          updated_at: persistedPosition?.updated_at ?? publisher.updated_at ?? undefined,
+          agent: roleLabel,
+          call_result: accountStatus,
+          notes,
+          date: (publisher.created_at || '').slice(0, 10) || undefined,
         };
       });
 
       const combined = mapped.sort((a, b) =>
-        new Date(b.created_at || b.submission_date || 0).getTime() - new Date(a.created_at || a.submission_date || 0).getTime()
+        new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
       );
 
       setData(combined);
@@ -631,110 +617,101 @@ const SubmissionPortalPage = () => {
 
   useEffect(() => {
     if (stagesLoading) return;
+    if (dbSubmissionStages.length === 0) {
+      setData([]);
+      setFilteredData([]);
+      setLoading(false);
+      return;
+    }
     void fetchData();
-  }, [fetchData, stagesLoading]);
+  }, [dbSubmissionStages.length, fetchData, stagesLoading]);
 
   const handleRefresh = () => {
     void fetchData(true);
   };
 
-  const fetchNoteCounts = async (rows: SubmissionPortalRow[] | null | undefined) => {
+  const fetchNoteCounts = (rows: SubmissionPortalRow[] | null | undefined) => {
     const safeRows = Array.isArray(rows) ? rows : [];
-    const leadIds = safeRows.map((r) => r.id).filter(Boolean);
-    if (leadIds.length === 0) {
-      setNoteCounts({});
-      return;
-    }
-
     const counts: Record<string, number> = {};
-    leadIds.forEach((id) => {
-      counts[id] = 0;
-    });
 
-    // lawyer_lead_notes
-    try {
-      const client = supabase as unknown as {
-        from: (table: string) => {
-          select: (cols: string) => {
-            in: (col: string, values: string[]) => Promise<{ data: unknown; error: { message?: string } | null }>;
-          };
-        };
-      };
-
-      const { data: noteRows, error: notesErr } = await client
-        .from('lawyer_lead_notes')
-        .select('lead_id')
-        .in('lead_id', leadIds);
-
-      if (!notesErr && Array.isArray(noteRows)) {
-        (noteRows as Array<{ lead_id: string }>).forEach((row) => {
-          if (!row?.lead_id) return;
-          if (counts[row.lead_id] === undefined) return;
-          counts[row.lead_id] = (counts[row.lead_id] || 0) + 1;
-        });
-      }
-    } catch (e) {
-      console.warn('Failed to fetch lead note counts', e);
-    }
-
-    // Legacy notes on lawyer_leads.additional_notes (mapped to row.notes)
     safeRows.forEach((r) => {
-      if ((r.notes || '').trim()) {
-        counts[r.id] = (counts[r.id] || 0) + 1;
-      }
+      counts[r.id] = (r.notes || '').trim() ? 1 : 0;
     });
 
     setNoteCounts(counts);
   };
 
-  const handleDropToStage = async (rowId: string, stageKey: string) => {
-    const prev = data;
-    const next = prev.map((r) =>
-      r.id === rowId
-        ? {
-            ...r,
-            stage_id: stageKey,
-            display_stage_key: undefined,
-            status: dbSubmissionStages.find((s) => s.key === stageKey)?.label || r.status,
-            pipeline_name: 'lawyer_portal',
-          }
-        : r
-    );
-    setData(next);
+  const persistPublisherStage = useCallback(
+    async (userId: string, stageKey: string, notes?: string | null) => {
+      const { data: authData } = await supabase.auth.getUser();
+      const authUserId = authData?.user?.id ?? null;
+      const payload: {
+        user_id: string;
+        stage_key: string;
+        updated_by: string | null;
+        notes?: string | null;
+      } = {
+        user_id: userId,
+        stage_key: stageKey,
+        updated_by: authUserId,
+      };
 
-    try {
-      const sb = supabase as unknown as {
+      if (notes !== undefined) {
+        payload.notes = notes && notes.trim() ? notes.trim() : null;
+      }
+
+      const client = supabase as unknown as {
         from: (table: string) => {
-          update: (data: unknown) => {
-            eq: (column: string, value: string) => Promise<{ error: { message?: string } | null }>;
-          };
+          upsert: (
+            row: typeof payload,
+            opts: { onConflict: string }
+          ) => Promise<{ error: { message?: string } | null }>;
         };
       };
 
-      const { error } = await sb
-        .from('lawyer_leads')
-        .update({ stage_id: stageKey, pipeline_name: 'lawyer_portal' })
-        .eq('id', rowId);
+      return client
+        .from("bpo_onboarding_portal_user_stages")
+        .upsert(payload, { onConflict: "user_id" });
+    },
+    []
+  );
 
-      if (error) throw error;
+  const handleDropToStage = async (rowId: string, stageKey: string) => {
+    const stage = dbSubmissionStages.find((s) => s.key === stageKey);
+    if (!stage) return;
 
-      const stageLabel = getBpoPortalStageDisplayLabel(
-        dbSubmissionStages.find((s) => s.key === stageKey)?.label || stageKey
-      );
+    const previousData = data;
+    setData((prev) =>
+      prev.map((r) =>
+        r.id === rowId
+          ? {
+              ...r,
+              stage_id: stage.key,
+              display_stage_key: stage.key,
+              status: stage.label,
+              pipeline_name: BPO_ONBOARDING_PORTAL_PIPELINE,
+              updated_at: new Date().toISOString(),
+            }
+          : r
+      )
+    );
 
+    const { error } = await persistPublisherStage(rowId, stage.key);
+
+    if (error) {
+      setData(previousData);
       toast({
-        title: 'Status Updated',
-        description: `Lead updated to "${stageLabel}"`,
-      });
-    } catch (e) {
-      console.error('Error updating status:', e);
-      setData(prev);
-      toast({
-        title: 'Error',
-        description: 'Failed to update lead status',
+        title: 'Stage Update Failed',
+        description: error.message || 'Failed to save publisher stage.',
         variant: 'destructive',
       });
+      return;
     }
+
+    toast({
+      title: 'Stage Updated',
+      description: `Publisher moved to "${getBpoPortalStageDisplayLabel(stage.label)}".`,
+    });
   };
 
   const leadsByStage = useMemo(() => {
@@ -775,27 +752,31 @@ const SubmissionPortalPage = () => {
     return pool.filter((label) => label.toLowerCase().includes(query));
   }, [allParentStageLabels, editStage]);
 
-  // Available reasons for the currently selected parent in the edit form (lawyer_portal only)
+  // Available reasons for the currently selected parent in the edit form.
   const editAvailableReasons = useMemo(() => {
-    if (editPipeline !== 'lawyer_portal') return [];
     const parentLabel = (editStage || '').trim();
     return reasonsByParent[parentLabel] || [];
-  }, [editPipeline, editStage, reasonsByParent]);
+  }, [editStage, reasonsByParent]);
 
   if (loading) {
     return <LogoLoader page label="Loading BPO portal..." />;
   }
 
-  const handleView = (row: SubmissionPortalRow) => {
-    if (!row?.id) return;
-    navigate(`/lead-detail/${encodeURIComponent(row.id)}`, {
-      state: { activeNav: '/submission-portal' },
-    });
-  };
+  if (dbSubmissionStages.length === 0) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="container mx-auto px-4 py-8">
+          <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+            BPO onboarding stages are not configured. Run the migration that creates
+            public.bpo_onboarding_portal_stages before using this board.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const handleOpenEdit = (row: SubmissionPortalRow) => {
     setEditRow(row);
-    setEditPipeline('lawyer_portal');
     const stageId = row.display_stage_key || row.stage_id || '';
     const currentLabel =
       dbSubmissionStages.find((s) => s.key === stageId)?.label ||
@@ -804,7 +785,7 @@ const SubmissionPortalPage = () => {
     const { parent, reason } = parseStageLabel(currentLabel.trim());
     setEditStage(parent);
     setEditReason(reason || '');
-    setEditNotes('');
+    setEditNotes(row.notes || '');
     setEditStageOpen(false);
     setEditOpen(true);
   };
@@ -823,125 +804,49 @@ const SubmissionPortalPage = () => {
 
     if (!nextStageRow) return;
 
-    const previousStage = (editRow.display_stage_key || editRow.stage_id || '').trim();
-    const stageChanged = previousStage !== nextStageRow.key || (editRow.pipeline_name || 'lawyer_portal') !== 'lawyer_portal';
+    setEditSaving(true);
+
+    const trimmedNote = (editNotes || '').trim();
+    const nextNotes = trimmedNote || undefined;
+    const nowIso = new Date().toISOString();
+    const optimisticUpdate = (r: SubmissionPortalRow) =>
+      r.id === editRow.id
+        ? {
+            ...r,
+            stage_id: nextStageRow.key,
+            display_stage_key: nextStageRow.key,
+            notes: nextNotes,
+            status: nextStageRow.label,
+            pipeline_name: BPO_ONBOARDING_PORTAL_PIPELINE,
+            updated_at: nowIso,
+          }
+        : r;
 
     try {
-      setEditSaving(true);
+      const { error } = await persistPublisherStage(editRow.id, nextStageRow.key, trimmedNote);
 
-      const sb = supabase as unknown as {
-        from: (table: string) => {
-          update: (data: unknown) => {
-            eq: (column: string, value: string) => Promise<{ error: { message?: string } | null }>;
-          };
-          insert: (rows: unknown) => Promise<{ error: { message?: string } | null }>;
-          select: (cols: string) => {
-            eq: (column: string, value: string) => {
-              maybeSingle: () => Promise<{ data: unknown; error: { message?: string } | null }>;
-            };
-          };
-        };
-        auth: {
-          getUser: () => Promise<{ data: { user: { id: string; email?: string | null } | null } | null; error: { message?: string } | null }>;
-        };
-      };
-
-      const { error } = await sb
-        .from('lawyer_leads')
-        .update({ stage_id: nextStageRow.key, additional_notes: editNotes, pipeline_name: 'lawyer_portal' })
-        .eq('id', editRow.id);
-
-      if (error) throw error;
-
-      const notesText = (editNotes || '').trim() || 'No notes provided.';
-
-      const trimmedNote = (editNotes || '').trim();
-      if (trimmedNote.length > 0) {
-        try {
-          const { data: userData, error: userErr } = await sb.auth.getUser();
-          const authUser = userData?.user;
-          if (userErr || !authUser?.id) {
-            console.warn('Failed to fetch auth user for note insert', userErr);
-          } else {
-            const { data: appUserRow, error: appUserErr } = await sb
-              .from('app_users')
-              .select('display_name,email')
-              .eq('user_id', authUser.id)
-              .maybeSingle();
-
-            if (appUserErr) {
-              console.warn('Failed to resolve created_by_name', appUserErr);
-            }
-
-            const typed = appUserRow as { display_name?: string | null; email?: string | null } | null;
-            const createdByName = (typed?.display_name || '').trim() || typed?.email || authUser.email || null;
-
-            const { error: insertErr } = await sb.from('lawyer_lead_notes').insert({
-              lead_id: editRow.id,
-              note: trimmedNote,
-              created_by: authUser.id,
-              created_by_name: createdByName,
-            });
-
-            if (insertErr) {
-              console.warn('Failed to insert lawyer_lead_notes row', insertErr);
-            }
-          }
-        } catch (e) {
-          console.warn('Unexpected error inserting lead note', e);
-        }
+      if (error) {
+        toast({
+          title: 'Publisher Update Failed',
+          description: error.message || 'Failed to save publisher stage.',
+          variant: 'destructive',
+        });
+        return;
       }
-      if (stageChanged || trimmedNote.length > 0) {
-        try {
-          const { error: slackError } = await supabase.functions.invoke('disposition-change-slack-alert', {
-            body: {
-              leadId: editRow.id,
-              submissionId: editRow.submission_id ?? null,
-              leadVendor: editRow.lead_vendor ?? '',
-              insuredName: editRow.insured_name ?? null,
-              clientPhoneNumber: editRow.client_phone_number ?? null,
-              previousDisposition: editRow.status ?? null,
-              newDisposition: nextStage,
-              notes: notesText,
-              noteOnly: !stageChanged,
-            },
-          });
-          if (slackError) {
-            console.warn('Slack alert invoke failed:', slackError);
-          }
-        } catch (e) {
-          console.warn('Slack alert invoke threw:', e);
-        }
-      }
-
-      const optimisticUpdate = (r: SubmissionPortalRow) =>
-        r.id === editRow.id
-          ? {
-              ...r,
-              stage_id: nextStageRow.key,
-              display_stage_key: nextStageRow.key,
-              notes: editNotes,
-              status: nextStage,
-              pipeline_name: 'lawyer_portal',
-            }
-          : r;
 
       setData((prev) => prev.map(optimisticUpdate));
       setFilteredData((prev) => prev.map(optimisticUpdate));
+      setNoteCounts((prev) => ({
+        ...prev,
+        [editRow.id]: nextNotes ? 1 : 0,
+      }));
 
       toast({
-        title: 'Contact Updated',
-        description: 'Stage and notes updated successfully.',
+        title: 'Publisher Updated',
+        description: 'Stage and notes saved.',
       });
 
       setEditOpen(false);
-    } catch (e) {
-      console.error('Error updating stage/notes:', e);
-      toast({
-        title: 'Error',
-        description: 'Failed to update stage/notes',
-        variant: 'destructive',
-      });
     } finally {
       setEditSaving(false);
     }
@@ -1051,7 +956,7 @@ const SubmissionPortalPage = () => {
 
               <div className="flex flex-wrap items-center gap-3">
                 <Badge variant="secondary" className="px-3 py-1">
-                  {filteredData.length} records
+                  {filteredData.length} publisher accounts
                 </Badge>
                 <Button onClick={handleRefresh} disabled={refreshing}>
                   <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
@@ -1062,7 +967,7 @@ const SubmissionPortalPage = () => {
 
             {showFilterRow && (
               <div className="mt-4 border-t pt-4">
-                <div className="grid gap-3 xl:grid-cols-[repeat(4,minmax(180px,1fr))]">
+                <div className="grid gap-3 xl:grid-cols-[repeat(3,minmax(180px,1fr))]">
                   <div className="space-y-2">
                     <Label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Company</Label>
                     <Select value={leadVendorFilter} onValueChange={(v) => setLeadVendorFilter(v)}>
@@ -1094,31 +999,6 @@ const SubmissionPortalPage = () => {
                           {dbSubmissionStages.map((s) => (
                             <SelectItem key={s.key} value={s.label}>
                               {getBpoPortalStageDisplayLabel(s.label)}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Assignee</Label>
-                    <Select
-                      value={assigneeFilter}
-                      onValueChange={(v) => setAssigneeFilter(v)}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Assignee" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectItem value="all">All Leads</SelectItem>
-                          {user?.id ? <SelectItem value={user.id}>My Leads</SelectItem> : null}
-                          {marketingTeam
-                            .filter((m) => m.user_id !== user?.id)
-                            .map((m) => (
-                            <SelectItem key={m.user_id} value={m.user_id}>
-                              {m.display_name}
                             </SelectItem>
                           ))}
                         </SelectGroup>
@@ -1216,7 +1096,7 @@ const SubmissionPortalPage = () => {
                         e.preventDefault();
                         const droppedId = e.dataTransfer.getData('text/plain');
                         if (!droppedId) return;
-                        handleDropToStage(droppedId, stage.key);
+                        void handleDropToStage(droppedId, stage.key);
                         setDraggingId(null);
                         setDragOverStage(null);
                       }}
@@ -1233,18 +1113,18 @@ const SubmissionPortalPage = () => {
                       <CardContent className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
                         {pageRows.length === 0 ? (
                           <div className="flex flex-1 h-full items-center justify-center rounded-md border border-dashed border-muted-foreground/30 px-3 py-6 text-center text-xs text-muted-foreground">
-                            No leads
+                            No publishers
                           </div>
                         ) : (
                           pageRows.map((row) => {
-                            const closer = row.licensed_agent_account || row.agent || row.buffer_agent || "-";
-                            const attorney = row.assigned_attorney_id ? (attorneyById[row.assigned_attorney_id] || "-") : "-";
+                            const publisherRole = row.agent || "-";
+                            const accountStatus = row.call_result || "-";
 
                             return (
                               <Card
                                 key={row.ui_id ?? row.id}
                                 draggable
-                                onClick={() => handleView(row)}
+                                onClick={() => handleOpenEdit(row)}
                                 onDragStart={(e) => {
                                   e.dataTransfer.effectAllowed = 'move';
                                   e.dataTransfer.setData('text/plain', row.id);
@@ -1304,10 +1184,10 @@ const SubmissionPortalPage = () => {
 
                                   <div className="mt-2 grid grid-cols-1 gap-1 text-xs text-muted-foreground">
                                     <div>
-                                      <span className="font-medium">Onboarding Agent:</span> {closer}
+                                      <span className="font-medium">Publisher Role:</span> {publisherRole}
                                     </div>
                                     <div>
-                                      <span className="font-medium">Assigned Rep:</span> {attorney}
+                                      <span className="font-medium">Account Status:</span> {accountStatus}
                                     </div>
                                   </div>
                                 </CardContent>
@@ -1367,29 +1247,10 @@ const SubmissionPortalPage = () => {
       >
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
-            <DialogTitle>Edit Contact</DialogTitle>
+            <DialogTitle>Edit Publisher</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Pipeline</Label>
-              <Select
-                value={editPipeline}
-                onValueChange={(value) => {
-                  setEditPipeline(value);
-                  setEditStage('');
-                  setEditReason('');
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select pipeline" />
-                </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="lawyer_portal">BPO Portal</SelectItem>
-                    </SelectContent>
-                  </Select>
-            </div>
-
             <div className="space-y-2">
               <Label>Stage</Label>
               <div className="relative">

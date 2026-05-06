@@ -6,6 +6,7 @@ import KpiCard from '@/components/dashboard/KpiCard';
 import AnalyticsTrendCard from '@/components/dashboard/AnalyticsTrendCard';
 import DashboardFilterBar from '@/components/dashboard/DashboardFilterBar';
 import { BPO_USER_ROLES, isBpoAccountActive, isFlowChatTagged } from '@/lib/bpo';
+import { BPO_ONBOARDING_STAGES } from '@/lib/bpoOnboardingStages';
 import {
   Send,
   UserCheck,
@@ -59,8 +60,8 @@ const ALL_STAT_CARDS: { key: StatCardKey; label: string; subtitle?: string }[] =
   { key: 'interestedConnected', label: 'Interested/Connected' },
   { key: 'scheduledMeetings', label: 'Scheduled Meetings' },
   { key: 'ranMeeting', label: 'Ran Meeting' },
-  { key: 'trainingMaterialShared', label: 'Training Material Shared' },
-  { key: 'onboardedTraining', label: 'Onboarded/Training' },
+  { key: 'trainingMaterialShared', label: 'Onboardings' },
+  { key: 'onboardedTraining', label: 'Trainings' },
   { key: 'activeBpos', label: 'Active BPOs' },
   { key: 'inactiveBpos', label: 'Inactive BPOs' },
 ];
@@ -194,7 +195,7 @@ const Dashboard = () => {
         sb
           .from('portal_stages')
           .select('id,key,label,pipeline')
-          .in('pipeline', ['cold_call_pipeline', 'lawyer_portal']),
+          .in('pipeline', ['cold_call_pipeline']),
         sb
           .from('lawyer_leads')
           .select('created_at,pipeline_name')
@@ -235,12 +236,19 @@ const Dashboard = () => {
         console.error('[manager-dashboard] FlowChat source query error', flowChatRowsRes.error);
       }
 
-      const stages = (stagesRes.data ?? []) as Array<{
+      const sharedStages = (stagesRes.data ?? []) as Array<{
         id: string;
         key: string;
         label: string;
         pipeline: string;
       }>;
+      const bpoStages = BPO_ONBOARDING_STAGES.map((stage) => ({
+        id: stage.id,
+        key: stage.key,
+        label: stage.label,
+        pipeline: 'lawyer_portal',
+      }));
+      const stages = [...sharedStages, ...bpoStages];
 
       const normalize = (value: string | null | undefined) => (value ?? '').trim().toLowerCase();
       const fingerprint = (value: string | null | undefined) =>
@@ -296,14 +304,14 @@ const Dashboard = () => {
 
       const trainingMaterialSharedTokens = new Set(stageTokensFor({
         pipeline: 'lawyer_portal',
-        keys: ['ready_to_move_forward', 'material_shared'],
-        labels: ['ready to move forward', 'material shared'],
+        keys: ['ready_to_move_forward', 'ready_to_move_forward'],
+        labels: ['ready to move forward', 'ready to move forward'],
       }));
 
       const onboardedTrainingTokens = new Set(stageTokensFor({
         pipeline: 'lawyer_portal',
-        keys: ['onboarded', 'onboarded_inactive_no_orders_yet', 'training'],
-        labels: ['onboarded', 'training'],
+        keys: ['training_ran'],
+        labels: ['training ran'],
       }));
 
       const countRowsByStage = (rows: typeof flowChatRows, tokens: Set<string>) =>

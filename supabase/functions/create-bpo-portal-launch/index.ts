@@ -1,7 +1,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.56.0'
 
-const DEFAULT_ATTORNEY_PORTAL_URL = 'https://attorney.accidentpayments.com'
-const DEFAULT_BPO_PORTAL_URL = 'https://bpo.accidentpayments.com'
+const VERCEL_BPO_ONBOARDING_PORTAL_URL = 'https://bpo-onboarding-portal.vercel.app'
+const PUBLISHER_PORTAL_URL = 'https://publisher.accidentpayments.com'
+const LEGACY_BPO_PORTAL_URL = 'https://bpo.accidentpayments.com'
+const DEFAULT_BPO_PORTAL_URL = PUBLISHER_PORTAL_URL
 const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:3000',
   'http://localhost:8080',
@@ -12,8 +14,10 @@ const DEFAULT_ALLOWED_ORIGINS = [
   'http://127.0.0.1:5173',
   'http://127.0.0.1:4173',
   'https://onboarding.accidentpayments.com',
+  VERCEL_BPO_ONBOARDING_PORTAL_URL,
   'https://attorney.accidentpayments.com',
-  'https://bpo.accidentpayments.com',
+  PUBLISHER_PORTAL_URL,
+  LEGACY_BPO_PORTAL_URL,
 ]
 
 type AppUserRole =
@@ -24,6 +28,7 @@ type AppUserRole =
   | 'accounts'
   | 'publisher_admin'
   | 'publisher_closer'
+  | 'broker'
 
 type AuthedUser = {
   id: string
@@ -35,9 +40,20 @@ type AppUserLookup = {
   email: string | null
   display_name: string | null
   role: AppUserRole | null
+  center_id?: string | null
   is_super_admin?: boolean | null
   account_status?: string | null
 }
+
+type CenterLookup = {
+  id: string
+  center_name: string | null
+  lead_vendor: string | null
+  is_active: boolean | null
+}
+
+const LAWYER_ACCOUNT_ROLES = ['lawyer'] as const
+const BPO_ACCOUNT_ROLES = ['publisher_admin', 'publisher_closer'] as const
 
 const getEnv = (key: string, fallback?: string) => {
   const value = Deno.env.get(key)?.trim()
@@ -104,7 +120,7 @@ const isLocalRequest = (req: Request) => {
   }
 }
 
-const normalizePortalUrl = (value: unknown) => {
+const normalizePortalUrl = (value: unknown, options?: { allowLocal?: boolean }) => {
   if (typeof value !== 'string') return null
 
   const trimmed = value.trim()
@@ -114,11 +130,16 @@ const normalizePortalUrl = (value: unknown) => {
     const parsed = new URL(trimmed)
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null
 
-    if (parsed.origin === DEFAULT_ATTORNEY_PORTAL_URL || parsed.origin === DEFAULT_BPO_PORTAL_URL) {
+    if (
+      parsed.origin === DEFAULT_ATTORNEY_PORTAL_URL ||
+      parsed.origin === DEFAULT_BPO_PORTAL_URL ||
+      parsed.origin === PUBLISHER_PORTAL_URL ||
+      parsed.origin === LEGACY_BPO_PORTAL_URL
+    ) {
       return parsed.origin
     }
 
-    if (isLoopbackHost(parsed.hostname)) {
+    if (options?.allowLocal && isLoopbackHost(parsed.hostname)) {
       return parsed.origin
     }
 
@@ -249,12 +270,16 @@ Deno.serve(async (req) => {
     const launchMode = bpoUserId ? 'bpo' : 'lawyer'
     const launchUserId = bpoUserId || lawyerUserId
     const requestedPath = sanitizeRequestedPath(body?.requested_path)
+    const allowLocalPortalUrl = isLocalRequest(req)
     const defaultPortalUrl = launchMode === 'bpo' ? DEFAULT_BPO_PORTAL_URL : DEFAULT_ATTORNEY_PORTAL_URL
     const configuredPortalUrl = normalizePortalUrl(
-      getEnv(launchMode === 'bpo' ? 'BPO_PORTAL_URL' : 'ATTORNEY_PORTAL_URL', defaultPortalUrl)
+      getEnv(launchMode === 'bpo' ? 'BPO_PORTAL_URL' : 'ATTORNEY_PORTAL_URL', defaultPortalUrl),
+      { allowLocal: allowLocalPortalUrl }
     )
-    const requestedPortalUrl = isLocalRequest(req)
-      ? normalizePortalUrl(launchMode === 'bpo' ? body?.bpo_portal_url : body?.attorney_portal_url)
+    const requestedPortalUrl = allowLocalPortalUrl
+      ? normalizePortalUrl(launchMode === 'bpo' ? body?.bpo_portal_url : body?.attorney_portal_url, {
+          allowLocal: true,
+        })
       : null
     const portalUrl = requestedPortalUrl ?? configuredPortalUrl ?? defaultPortalUrl
 
@@ -264,7 +289,7 @@ Deno.serve(async (req) => {
 
     const { data: accountRow, error: accountError } = await adminClient
       .from('app_users')
-      .select('user_id,email,display_name,role,account_status')
+      .select('user_id,email,display_name,role,center_id,account_status')
       .eq('user_id', launchUserId)
       .maybeSingle()
 
@@ -273,16 +298,48 @@ Deno.serve(async (req) => {
     }
 
     const account = accountRow as AppUserLookup | null
-    const allowedAccountRoles =
-      launchMode === 'bpo' ? ['publisher_admin', 'publisher_closer'] : ['lawyer']
     const accountLabel = launchMode === 'bpo' ? 'BPO' : 'Lawyer'
+    const hasAllowedAccountRole = Boolean(
+      account &&
+        (launchMode === 'bpo'
+          ? BPO_ACCOUNT_ROLES.includes(account.role as (typeof BPO_ACCOUNT_ROLES)[number])
+          : LAWYER_ACCOUNT_ROLES.includes(account.role as (typeof LAWYER_ACCOUNT_ROLES)[number])),
+    )
 
-    if (!account || !allowedAccountRoles.includes(account.role ?? '')) {
+    if (!account || !hasAllowedAccountRole) {
       return json(req, 404, { error: `${accountLabel} account not found` })
     }
 
     if (!isPortalAccountLaunchable(account.account_status)) {
       return json(req, 400, { error: `This ${accountLabel.toLowerCase()} account is not active and cannot be launched` })
+    }
+
+    let bpoCenter: CenterLookup | null = null
+
+    if (launchMode === 'bpo') {
+      if (!account.center_id) {
+        return json(req, 400, { error: 'This BPO account is not linked to a center and cannot be launched' })
+      }
+
+      const { data: centerRow, error: centerError } = await adminClient
+        .from('centers')
+        .select('id,center_name,lead_vendor,is_active')
+        .eq('id', account.center_id)
+        .maybeSingle()
+
+      if (centerError) {
+        return json(req, 500, { error: centerError.message })
+      }
+
+      bpoCenter = centerRow as CenterLookup | null
+
+      if (!bpoCenter) {
+        return json(req, 404, { error: 'BPO center not found' })
+      }
+
+      if (bpoCenter.is_active === false) {
+        return json(req, 400, { error: 'This BPO center is inactive and cannot be launched' })
+      }
     }
 
     const { data: authUserData, error: authUserError } = await adminClient.auth.admin.getUserById(launchUserId)
@@ -335,6 +392,7 @@ Deno.serve(async (req) => {
         email: accountEmail,
         displayName: account.display_name,
         role: account.role,
+        centerId: account.center_id ?? null,
         type: launchMode,
       },
       ...(launchMode === 'lawyer'
@@ -350,6 +408,14 @@ Deno.serve(async (req) => {
               userId: account.user_id,
               email: accountEmail,
               displayName: account.display_name,
+              centerId: account.center_id ?? null,
+              center: bpoCenter
+                ? {
+                    id: bpoCenter.id,
+                    name: bpoCenter.center_name || bpoCenter.lead_vendor,
+                    isActive: bpoCenter.is_active !== false,
+                  }
+                : null,
             },
           }),
     })

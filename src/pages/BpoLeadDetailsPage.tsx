@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { usePipelineStages } from "@/hooks/usePipelineStages";
+import { BPO_ONBOARDING_STAGES } from "@/lib/bpoOnboardingStages";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -99,21 +100,24 @@ const BpoLeadDetailsPage = () => {
   const [addNoteSaving, setAddNoteSaving] = useState(false);
 
   const pipelineName = form?.pipeline_name || record?.pipeline_name || "cold_call_pipeline";
-  const { stages, loading: stagesLoading } = usePipelineStages(pipelineName);
+  const { stages: sharedStages, loading: sharedStagesLoading } = usePipelineStages(
+    pipelineName === "lawyer_portal" ? "cold_call_pipeline" : pipelineName
+  );
+  const stages = pipelineName === "lawyer_portal" ? BPO_ONBOARDING_STAGES : sharedStages;
+  const stagesLoading = pipelineName === "lawyer_portal" ? false : sharedStagesLoading;
 
   const { stages: coldCallStages } = usePipelineStages("cold_call_pipeline");
-  const { stages: lawyerPortalStages } = usePipelineStages("lawyer_portal");
   const { stages: submissionPortalStages } = usePipelineStages("submission_portal");
 
   const stageLabelByAnyId = useMemo(() => {
     const map = new Map<string, string>();
-    const all = [...coldCallStages, ...lawyerPortalStages, ...submissionPortalStages];
+    const all = [...coldCallStages, ...BPO_ONBOARDING_STAGES, ...submissionPortalStages];
     all.forEach((s) => {
       map.set(s.id, s.label);
       map.set(s.key, s.label);
     });
     return map;
-  }, [coldCallStages, lawyerPortalStages, submissionPortalStages]);
+  }, [coldCallStages, submissionPortalStages]);
 
   const prevPipelineRef = useRef<string>(pipelineName);
 
