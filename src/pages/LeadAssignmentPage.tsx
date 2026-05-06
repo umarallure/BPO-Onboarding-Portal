@@ -94,10 +94,10 @@ const LeadAssignmentPage = () => {
       if (error) throw error;
       const allowed = Boolean(typed?.is_super_admin) || typed?.role === "super_admin";
       setIsSuperAdmin(allowed);
-      if (!allowed) navigate("/leads", { replace: true });
+      if (!allowed) navigate("/manager-dashboard", { replace: true });
     } catch {
       setIsSuperAdmin(false);
-      navigate("/leads", { replace: true });
+      navigate("/manager-dashboard", { replace: true });
     } finally {
       setCheckingAccess(false);
     }

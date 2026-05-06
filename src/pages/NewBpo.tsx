@@ -52,6 +52,8 @@ const NewBpo = () => {
     [portalStages]
   );
 
+  const returnPath = selectedPipeline === "lawyer_portal" ? "/submission-portal" : "/transfer-portal";
+
   useEffect(() => {
     if (activeStages.length === 0) return;
 
@@ -148,7 +150,7 @@ const NewBpo = () => {
         description: "New BPO created successfully",
       });
 
-      navigate("/leads");
+      navigate(returnPath);
     } catch (error) {
       console.error("Error:", error);
       toast({
@@ -173,7 +175,7 @@ const NewBpo = () => {
         <div className="flex items-center gap-4">
           <Button
             variant="outline"
-            onClick={() => navigate("/leads")}
+            onClick={() => navigate(returnPath)}
             className="flex items-center gap-2"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -370,7 +372,7 @@ const NewBpo = () => {
 
           {/* Action Buttons */}
           <div className="flex justify-end space-x-4">
-            <Button type="button" variant="outline" onClick={() => navigate("/leads")}>
+            <Button type="button" variant="outline" onClick={() => navigate(returnPath)}>
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting} className="min-w-44">
