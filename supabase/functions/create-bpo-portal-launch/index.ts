@@ -1,21 +1,13 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.56.0'
 
-const VERCEL_BPO_ONBOARDING_PORTAL_URL = 'https://bpo-onboarding-portal.vercel.app'
+const VERCEL_BPO_ONBOARDING_PORTAL_URL = 'https://bpoonboarding.accidentpayments.com'
 const PUBLISHER_PORTAL_URL = 'https://publisher.accidentpayments.com'
 const DEFAULT_BPO_PORTAL_URL = PUBLISHER_PORTAL_URL
 
 const ALLOWED_BPO_PORTAL_ORIGINS = [PUBLISHER_PORTAL_URL] as const
 
 const DEFAULT_ALLOWED_ORIGINS = [
-  'http://localhost:3000',
   'http://localhost:8080',
-  'http://localhost:5173',
-  'http://localhost:4173',
-  'http://127.0.0.1:3000',
-  'http://127.0.0.1:8080',
-  'http://127.0.0.1:5173',
-  'http://127.0.0.1:4173',
-  'https://onboarding.accidentpayments.com',
   VERCEL_BPO_ONBOARDING_PORTAL_URL,
   PUBLISHER_PORTAL_URL,
 ]
