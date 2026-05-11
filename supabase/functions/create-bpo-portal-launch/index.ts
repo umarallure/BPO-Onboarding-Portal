@@ -11,7 +11,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
   VERCEL_BPO_ONBOARDING_PORTAL_URL,
   PUBLISHER_PORTAL_URL,
 ]
-
+ 
 const BPO_ACCOUNT_ROLES = ['publisher_admin', 'publisher_closer'] as const
 type BpoAccountRole = (typeof BPO_ACCOUNT_ROLES)[number]
 
