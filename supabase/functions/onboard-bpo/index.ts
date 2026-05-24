@@ -45,6 +45,31 @@ const optionalStringArray = z.preprocess(
   z.array(z.string()).default([]),
 );
 
+const optionalCommaSeparatedStringArray = z.preprocess(
+  (value) => {
+    const values = Array.isArray(value) ? value : typeof value === 'string' ? value.split(',') : [];
+    return values
+      .map((item) => (typeof item === 'string' ? item.trim() : ''))
+      .filter(Boolean);
+  },
+  z.array(z.string()).default([]),
+);
+
+const optionalNonNegativeInt = z.preprocess(
+  (value) => {
+    if (typeof value === 'number' && Number.isFinite(value)) return Math.trunc(value);
+    if (typeof value !== 'string') return undefined;
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    if (!/^\d+$/.test(trimmed)) return value;
+    const parsed = Number.parseInt(trimmed, 10);
+    return Number.isFinite(parsed) ? parsed : value;
+  },
+  z.number().int().min(0).optional(),
+);
+
+const SALES_MODEL_VALUES = ['cpi', 'cpl', 'cpq', 'signed_retainer', 'seat', 'hourly', 'other'] as const;
+
 const centerRequestSchema = z.object({
   mode: z.literal('center'),
   center: z.object({
@@ -56,6 +81,11 @@ const centerRequestSchema = z.object({
     number_of_agents: optionalText,
     languages: optionalStringArray,
     operating_hours: optionalText,
+    campaigns: optionalCommaSeparatedStringArray,
+    buyer_count: optionalNonNegativeInt,
+    sales_model: z.enum(SALES_MODEL_VALUES).optional(),
+    sales_model_other: optionalText,
+    selling_markets: optionalCommaSeparatedStringArray,
   }),
 });
 
@@ -191,6 +221,11 @@ serve(async (req) => {
         number_of_agents,
         languages,
         operating_hours,
+        campaigns,
+        buyer_count,
+        sales_model,
+        sales_model_other,
+        selling_markets,
       } = parsed.data.center;
 
       const { data: existing, error: existingError } = await admin
@@ -227,6 +262,11 @@ serve(async (req) => {
           number_of_agents: number_of_agents ?? null,
           languages: languages ?? [],
           operating_hours: operating_hours ?? null,
+          campaigns: campaigns ?? [],
+          buyer_count: buyer_count ?? null,
+          sales_model: sales_model ?? null,
+          sales_model_other: sales_model === 'other' ? sales_model_other ?? null : null,
+          selling_markets: selling_markets ?? [],
           is_active: true,
         })
         .select('id, center_name, lead_vendor')

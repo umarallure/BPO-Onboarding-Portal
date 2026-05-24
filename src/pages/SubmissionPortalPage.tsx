@@ -30,11 +30,19 @@ import {
   deriveParentStages,
   buildStatusLabel,
 } from "@/lib/stageUtils";
-import { BPO_USER_ROLES, formatBpoRoleLabel, getBpoPortalStageDisplayLabel } from "@/lib/bpo";
+import { formatBpoRoleLabel, getBpoPortalStageDisplayLabel } from "@/lib/bpo";
 import {
   BPO_ONBOARDING_PORTAL_PIPELINE,
   getPublisherFrontendStageKey,
 } from "@/lib/bpoOnboardingStages";
+import {
+  buildCountryOptions,
+  CENTER_FILTER_ALL,
+  COMPANY_SIZE_OPTIONS,
+  type CompanySizeValue,
+  getCompanySizeFromAgentCount,
+  getCountryFromCenterLocation,
+} from "@/lib/centerFilters";
 import {
   addDays,
   endOfMonth,
@@ -117,6 +125,10 @@ export interface SubmissionPortalRow {
   verification_logs?: string;
   has_submission_data?: boolean;
   source_type?: string;
+  center_country?: string;
+  center_location?: string;
+  center_number_of_agents?: string;
+  company_size?: CompanySizeValue | "";
 }
 
 interface CallLog {
@@ -201,6 +213,8 @@ const SubmissionPortalPage = () => {
   const [customEndDate, setCustomEndDate] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState("__ALL__");
   const [leadVendorFilter, setLeadVendorFilter] = useState("__ALL__");
+  const [countryFilter, setCountryFilter] = useState(CENTER_FILTER_ALL);
+  const [companySizeFilter, setCompanySizeFilter] = useState(CENTER_FILTER_ALL);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [showFilterRow, setShowFilterRow] = useState(false);
   const [searchDropdownOpen, setSearchDropdownOpen] = useState(false);
@@ -244,6 +258,14 @@ const SubmissionPortalPage = () => {
       filtered = filtered.filter((record) => (record.lead_vendor || '') === leadVendorFilter);
     }
 
+    if (countryFilter !== CENTER_FILTER_ALL) {
+      filtered = filtered.filter((record) => (record.center_country || '') === countryFilter);
+    }
+
+    if (companySizeFilter !== CENTER_FILTER_ALL) {
+      filtered = filtered.filter((record) => record.company_size === companySizeFilter);
+    }
+
     // Apply search filter
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
@@ -260,7 +282,7 @@ const SubmissionPortalPage = () => {
     }
 
     return filtered;
-  }, [leadVendorFilter, searchTerm, statusFilter]);
+  }, [companySizeFilter, countryFilter, leadVendorFilter, searchTerm, statusFilter]);
 
   const leadVendorOptions = useMemo(() => {
     const set = new Set<string>();
@@ -271,9 +293,13 @@ const SubmissionPortalPage = () => {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [data]);
 
+  const countryOptions = useMemo(() => buildCountryOptions(data), [data]);
+
   const hasActiveFilters =
     searchTerm.trim().length > 0 ||
     leadVendorFilter !== "__ALL__" ||
+    countryFilter !== CENTER_FILTER_ALL ||
+    companySizeFilter !== CENTER_FILTER_ALL ||
     statusFilter !== "__ALL__" ||
     timeRange !== "all_time" ||
     customStartDate.length > 0 ||
@@ -282,6 +308,8 @@ const SubmissionPortalPage = () => {
   const handleClearFilters = () => {
     setSearchTerm("");
     setLeadVendorFilter("__ALL__");
+    setCountryFilter(CENTER_FILTER_ALL);
+    setCompanySizeFilter(CENTER_FILTER_ALL);
     setStatusFilter("__ALL__");
     setTimeRange("all_time");
     setCustomStartDate("");
@@ -466,7 +494,7 @@ const SubmissionPortalPage = () => {
       let publisherQ = sb
         .from("app_users")
         .select("user_id,email,display_name,role,center_id,account_status,created_at,updated_at")
-        .in("role", BPO_USER_ROLES);
+        .eq("role", "publisher_admin");
 
       if (range) {
         publisherQ = publisherQ.gte("created_at", range.startIso).lt("created_at", range.endExclusiveIso);
@@ -478,7 +506,7 @@ const SubmissionPortalPage = () => {
         publisherQ,
         sb
           .from("centers")
-          .select("id,center_name,lead_vendor,contact_email,contact_phone,is_active,created_at,updated_at")
+          .select("id,center_name,lead_vendor,contact_email,contact_phone,location,number_of_agents,is_active,created_at,updated_at")
           .order("center_name", { ascending: true }),
         sb
           .from("bpo_onboarding_portal_user_stages")
@@ -486,26 +514,26 @@ const SubmissionPortalPage = () => {
       ]);
 
       if (publisherRes.error) {
-        console.error('Error fetching BPO publisher accounts:', publisherRes.error);
+        console.error('Error fetching BPO publisher admin accounts:', publisherRes.error);
         toast({
           title: 'Error',
-          description: 'Failed to fetch BPO publisher accounts',
+          description: 'Failed to fetch BPO publisher admin accounts',
           variant: 'destructive',
         });
         return;
       }
       if (centersRes.error) {
-        console.warn('BPO center details unavailable; loading publisher accounts without center names:', centersRes.error);
+        console.warn('BPO center details unavailable; loading publisher admin accounts without center names:', centersRes.error);
         toast({
           title: 'Center Details Unavailable',
-          description: 'Publisher accounts loaded without BPO company details.',
+          description: 'Publisher admin accounts loaded without BPO company details.',
         });
       }
       if (stagePositionsRes.error) {
-        console.warn('BPO stage positions unavailable; loading publisher accounts with inferred stages:', stagePositionsRes.error);
+        console.warn('BPO stage positions unavailable; loading publisher admin accounts with inferred stages:', stagePositionsRes.error);
         toast({
           title: 'Stage Tracking Unavailable',
-          description: 'Publisher accounts loaded with inferred board stages.',
+          description: 'Publisher admin accounts loaded with inferred board stages.',
         });
       }
 
@@ -525,6 +553,8 @@ const SubmissionPortalPage = () => {
         lead_vendor: string | null;
         contact_email: string | null;
         contact_phone: string | null;
+        location: string | null;
+        number_of_agents: string | null;
         is_active: boolean | null;
         created_at: string | null;
         updated_at: string | null;
@@ -552,6 +582,8 @@ const SubmissionPortalPage = () => {
         const center = publisher.center_id ? centerById.get(publisher.center_id) : null;
         const displayName = (publisher.display_name || '').trim() || publisher.email || 'Unnamed publisher';
         const companyName = center?.center_name || center?.lead_vendor || 'No BPO assigned';
+        const centerCountry = getCountryFromCenterLocation(center?.location);
+        const companySize = getCompanySizeFromAgentCount(center?.number_of_agents);
         const roleLabel = formatBpoRoleLabel(publisher.role);
         const accountStatus = String(publisher.account_status || '').trim() || 'Not set';
         const notes = (persistedPosition?.notes || '').trim()
@@ -565,6 +597,10 @@ const SubmissionPortalPage = () => {
           insured_name: displayName,
           client_phone_number: center?.contact_phone || center?.contact_email || publisher.email || undefined,
           lead_vendor: companyName,
+          center_country: centerCountry || undefined,
+          center_location: center?.location ?? undefined,
+          center_number_of_agents: center?.number_of_agents ?? undefined,
+          company_size: companySize,
           stage_id: stageKey,
           assigned_user_id: null,
           status: stageLabel,
@@ -956,7 +992,7 @@ const SubmissionPortalPage = () => {
 
               <div className="flex flex-wrap items-center gap-3">
                 <Badge variant="secondary" className="px-3 py-1">
-                  {filteredData.length} publisher accounts
+                  {filteredData.length} publisher admins
                 </Badge>
                 <Button onClick={handleRefresh} disabled={refreshing}>
                   <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
@@ -967,7 +1003,7 @@ const SubmissionPortalPage = () => {
 
             {showFilterRow && (
               <div className="mt-4 border-t pt-4">
-                <div className="grid gap-3 xl:grid-cols-[repeat(3,minmax(180px,1fr))]">
+                <div className="grid gap-3 xl:grid-cols-[repeat(5,minmax(170px,1fr))]">
                   <div className="space-y-2">
                     <Label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Company</Label>
                     <Select value={leadVendorFilter} onValueChange={(v) => setLeadVendorFilter(v)}>
@@ -980,6 +1016,44 @@ const SubmissionPortalPage = () => {
                           {leadVendorOptions.map((vendor) => (
                             <SelectItem key={vendor} value={vendor}>
                               {vendor}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Country</Label>
+                    <Select value={countryFilter} onValueChange={setCountryFilter}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="All Countries" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value={CENTER_FILTER_ALL}>All Countries</SelectItem>
+                          {countryOptions.map((country) => (
+                            <SelectItem key={country} value={country}>
+                              {country}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Company Size</Label>
+                    <Select value={companySizeFilter} onValueChange={setCompanySizeFilter}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="All Sizes" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value={CENTER_FILTER_ALL}>All Sizes</SelectItem>
+                          {COMPANY_SIZE_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
                             </SelectItem>
                           ))}
                         </SelectGroup>
