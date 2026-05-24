@@ -3,9 +3,25 @@ import { ArrowLeftRight, Calendar, PhoneCall, Users } from "lucide-react";
 
 import LogoLoader from "@/components/LogoLoader";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useCenters } from "@/hooks/useCenters";
 import { usePipelineStages } from "@/hooks/usePipelineStages";
 import { getMarketingStageDisplayLabel, isHiddenMarketingStage } from "@/lib/bpo";
+import {
+  buildCountryOptions,
+  CENTER_FILTER_ALL,
+  COMPANY_SIZE_OPTIONS,
+} from "@/lib/centerFilters";
 
 type ViewMode = "kanban" | "list";
 
@@ -34,7 +50,11 @@ const getBoardStageLabel = (label: string) => {
 
 const TransferPortalPage = () => {
   const [viewMode, setViewMode] = useState<ViewMode>("kanban");
+  const [showFilterRow, setShowFilterRow] = useState(false);
+  const [countryFilter, setCountryFilter] = useState(CENTER_FILTER_ALL);
+  const [companySizeFilter, setCompanySizeFilter] = useState(CENTER_FILTER_ALL);
   const { stages: dbTransferStages, loading: stagesLoading } = usePipelineStages("cold_call_pipeline");
+  const { centers } = useCenters();
 
   const kanbanStages = useMemo<BoardStage[]>(() => {
     const stages = dbTransferStages
@@ -47,6 +67,16 @@ const TransferPortalPage = () => {
 
     return stages.length > 0 ? stages : FALLBACK_MARKETING_STAGES;
   }, [dbTransferStages]);
+
+  const countryOptions = useMemo(() => buildCountryOptions(centers), [centers]);
+  const hasActiveFilters =
+    countryFilter !== CENTER_FILTER_ALL || companySizeFilter !== CENTER_FILTER_ALL;
+
+  const handleClearFilters = () => {
+    setCountryFilter(CENTER_FILTER_ALL);
+    setCompanySizeFilter(CENTER_FILTER_ALL);
+    setShowFilterRow(false);
+  };
 
   if (stagesLoading) {
     return <LogoLoader page label="Loading marketing pipeline..." />;
@@ -99,28 +129,87 @@ const TransferPortalPage = () => {
           </div>
 
           <div className="rounded-lg border bg-card p-4 shadow-sm">
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <div className="inline-flex w-full rounded-lg border border-muted bg-background p-0.5 xl:w-auto">
-                {(["kanban", "list"] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition xl:flex-none ${
-                      viewMode === mode
-                        ? "bg-primary text-white shadow"
-                        : "text-muted-foreground hover:bg-muted"
-                    }`}
-                    onClick={() => setViewMode(mode)}
-                  >
-                    {mode === "kanban" ? "Kanban View" : "List View"}
-                  </button>
-                ))}
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <div className="inline-flex w-full rounded-lg border border-muted bg-background p-0.5 sm:w-auto">
+                  {(["kanban", "list"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition sm:flex-none ${
+                        viewMode === mode
+                          ? "bg-primary text-white shadow"
+                          : "text-muted-foreground hover:bg-muted"
+                      }`}
+                      onClick={() => setViewMode(mode)}
+                    >
+                      {mode === "kanban" ? "Kanban View" : "List View"}
+                    </button>
+                  ))}
+                </div>
+
+                <Button
+                  type="button"
+                  variant={showFilterRow ? "default" : "outline"}
+                  onClick={() => setShowFilterRow((prev) => !prev)}
+                >
+                  Filter
+                </Button>
+                {hasActiveFilters ? (
+                  <Button type="button" variant="ghost" onClick={handleClearFilters}>
+                    Clear
+                  </Button>
+                ) : null}
               </div>
 
               <Badge variant="secondary" className="w-fit px-2.5 py-1">
                 0 opportunities
               </Badge>
             </div>
+
+            {showFilterRow && (
+              <div className="mt-4 border-t pt-4">
+                <div className="grid gap-3 xl:grid-cols-[repeat(2,minmax(180px,1fr))]">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Country</Label>
+                    <Select value={countryFilter} onValueChange={setCountryFilter}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="All Countries" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value={CENTER_FILTER_ALL}>All Countries</SelectItem>
+                          {countryOptions.map((country) => (
+                            <SelectItem key={country} value={country}>
+                              {country}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Company Size</Label>
+                    <Select value={companySizeFilter} onValueChange={setCompanySizeFilter}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="All Sizes" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value={CENTER_FILTER_ALL}>All Sizes</SelectItem>
+                          {COMPANY_SIZE_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {viewMode === "kanban" ? (

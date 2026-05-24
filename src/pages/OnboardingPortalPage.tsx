@@ -29,6 +29,12 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { useCenters } from '@/hooks/useCenters';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  COUNTRY_CALLING_CODE_OPTIONS,
+  DEFAULT_COUNTRY_CALLING_CODE,
+  findCountryCodeByDialCode,
+  getDialCodeForCountry,
+} from '@/lib/countryCallingCodes';
 
 /* ── Constants ── */
 
@@ -95,9 +101,20 @@ const SHIFT_OPTIONS = [
   { value: 'full_day', label: 'Full Day' },
 ] as const;
 
+const CENTER_MODEL_OPTIONS = [
+  { value: 'cpi', label: 'CPI' },
+  { value: 'cpl', label: 'CPL' },
+  { value: 'cpq', label: 'CPQ' },
+  { value: 'signed_retainer', label: 'Signed Retainer' },
+  { value: 'seat', label: 'Seat' },
+  { value: 'hourly', label: 'Hourly' },
+  { value: 'other', label: 'Other' },
+] as const;
+
 type PublisherRole = (typeof PUBLISHER_ROLES)[number]['value'];
 type PositionValue = (typeof POSITION_OPTIONS)[number]['value'];
 type ShiftValue = (typeof SHIFT_OPTIONS)[number]['value'];
+type CenterModelValue = (typeof CENTER_MODEL_OPTIONS)[number]['value'];
 type OnboardingMode = 'center' | 'publisher';
 type EdgeErrorPayload = {
   code?: string;
@@ -112,6 +129,39 @@ const DASH_SELECT_CONTENT_CLASS =
 const DASH_MULTISELECT_CLASS =
   'border-[var(--dash-border)] bg-background/80 text-[13px] text-[var(--dash-text)] backdrop-blur-sm hover:border-[var(--dash-border-hover)]';
 const DASH_MULTISELECT_COMPACT_CLASS = `${DASH_MULTISELECT_CLASS} min-h-9 h-9`;
+
+const parsePhoneWithCountryCode = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return { countryCode: DEFAULT_COUNTRY_CALLING_CODE, localNumber: '' };
+  }
+
+  const matchedCountryCode = findCountryCodeByDialCode(trimmed);
+
+  if (!matchedCountryCode) {
+    return { countryCode: DEFAULT_COUNTRY_CALLING_CODE, localNumber: trimmed };
+  }
+
+  const dialCode = getDialCodeForCountry(matchedCountryCode);
+
+  return {
+    countryCode: matchedCountryCode,
+    localNumber: trimmed.slice(dialCode.length).replace(/^[\s().-]+/, '').trim(),
+  };
+};
+
+const buildPhoneWithCountryCode = (countryCode: string, localNumber: string) => {
+  const trimmed = localNumber.trim();
+  if (!trimmed) return '';
+  if (trimmed.startsWith('+')) return trimmed;
+  return `${getDialCodeForCountry(countryCode)} ${trimmed}`;
+};
+
+const splitCommaSeparatedValues = (value: string) =>
+  value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 
 const readFunctionErrorPayload = async (error: unknown): Promise<EdgeErrorPayload | null> => {
   const context =
@@ -197,6 +247,66 @@ function FormInput({
         {...props}
       />
       {helper && <FieldHelper>{helper}</FieldHelper>}
+      <FieldError message={error} />
+    </div>
+  );
+}
+
+function PhoneWithCountryCodeInput({
+  label,
+  required,
+  countryCode,
+  localNumber,
+  onCountryCodeChange,
+  onLocalNumberChange,
+  error,
+  placeholder = '555 123 4567',
+}: {
+  label: string;
+  required?: boolean;
+  countryCode: string;
+  localNumber: string;
+  onCountryCodeChange: (value: string) => void;
+  onLocalNumberChange: (value: string) => void;
+  error?: string;
+  placeholder?: string;
+}) {
+  const updateLocalNumber = (nextLocalNumber: string) => {
+    if (nextLocalNumber.trim().startsWith('+')) {
+      const parsed = parsePhoneWithCountryCode(nextLocalNumber);
+      onCountryCodeChange(parsed.countryCode);
+      onLocalNumberChange(parsed.localNumber);
+      return;
+    }
+
+    onLocalNumberChange(nextLocalNumber);
+  };
+
+  return (
+    <div>
+      <FieldLabel required={required}>{label}</FieldLabel>
+      <div className="grid grid-cols-[9.5rem_minmax(0,1fr)] gap-2">
+        <Select value={countryCode} onValueChange={onCountryCodeChange}>
+          <SelectTrigger className={`${DASH_SELECT_TRIGGER_CLASS} w-full`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className={DASH_SELECT_CONTENT_CLASS}>
+            {COUNTRY_CALLING_CODE_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Input
+          type="tel"
+          inputMode="tel"
+          placeholder={placeholder}
+          value={localNumber}
+          onChange={(ev) => updateLocalNumber(ev.target.value)}
+          className="h-9 min-w-0 border-[var(--dash-border)] bg-transparent text-[13px] text-[var(--dash-text)] placeholder:text-[var(--dash-text-muted)]/50 focus:ring-[#AE4010]/30 focus:border-[#AE4010]/40"
+        />
+      </div>
       <FieldError message={error} />
     </div>
   );
@@ -316,23 +426,37 @@ function ModeSelector({
 
 /* ── Validation schemas (client-side mirror of edge function) ── */
 
-const centerSchema = z.object({
-  center_name: z.string().trim().min(1, 'Center name is required'),
-  location: z.string().trim().optional(),
-  website_or_linkedin: z.string().trim().optional(),
-  contact_email: z
-    .string()
-    .trim()
-    .optional()
-    .refine(
-      (v) => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
-      'Invalid email',
-    ),
-  contact_phone: z.string().trim().optional(),
-  number_of_agents: z.string().trim().optional(),
-  languages: z.array(z.string()).optional(),
-  operating_hours: z.string().trim().optional(),
-});
+const centerSchema = z
+  .object({
+    center_name: z.string().trim().min(1, 'Center name is required'),
+    location: z.string().trim().optional(),
+    website_or_linkedin: z.string().trim().optional(),
+    contact_email: z
+      .string()
+      .trim()
+      .optional()
+      .refine(
+        (v) => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
+        'Invalid email',
+      ),
+    contact_phone: z.string().trim().optional(),
+    number_of_agents: z.string().trim().optional(),
+    languages: z.array(z.string()).optional(),
+    operating_hours: z.string().trim().optional(),
+    campaigns: z.array(z.string()).optional(),
+    buyer_count: z
+      .string()
+      .trim()
+      .optional()
+      .refine((v) => !v || /^\d+$/.test(v), 'Buyers must be a whole number'),
+    sales_model: z.enum(['cpi', 'cpl', 'cpq', 'signed_retainer', 'seat', 'hourly', 'other']).optional(),
+    sales_model_other: z.string().trim().optional(),
+    selling_markets: z.array(z.string()).optional(),
+  })
+  .refine((data) => data.sales_model !== 'other' || Boolean(data.sales_model_other?.trim()), {
+    message: 'Specify the model when Other is selected',
+    path: ['sales_model_other'],
+  });
 
 const baseAccountSchema = z
   .object({
@@ -368,10 +492,16 @@ export default function OnboardingPortalPage() {
   const [centerLocation, setCenterLocation] = useState('');
   const [centerWebsite, setCenterWebsite] = useState('');
   const [centerContactEmail, setCenterContactEmail] = useState('');
-  const [centerContactPhone, setCenterContactPhone] = useState('');
+  const [centerWhatsAppCountryCode, setCenterWhatsAppCountryCode] = useState<string>(DEFAULT_COUNTRY_CALLING_CODE);
+  const [centerWhatsAppNumber, setCenterWhatsAppNumber] = useState('');
   const [centerNumberOfAgents, setCenterNumberOfAgents] = useState('');
   const [centerLanguages, setCenterLanguages] = useState<string[]>([]);
   const [centerOperatingHours, setCenterOperatingHours] = useState('');
+  const [centerCampaigns, setCenterCampaigns] = useState('');
+  const [centerBuyerCount, setCenterBuyerCount] = useState('');
+  const [centerModel, setCenterModel] = useState<CenterModelValue | ''>('');
+  const [centerModelOther, setCenterModelOther] = useState('');
+  const [centerSellingMarkets, setCenterSellingMarkets] = useState('');
 
   /* ── Publisher account form state ── */
   const [pubCenterId, setPubCenterId] = useState('');
@@ -401,6 +531,8 @@ export default function OnboardingPortalPage() {
     [centers],
   );
 
+  const centerContactPhone = buildPhoneWithCountryCode(centerWhatsAppCountryCode, centerWhatsAppNumber);
+
   const resetMessages = () => {
     setFieldErrors({});
     setSubmitResult(null);
@@ -427,6 +559,11 @@ export default function OnboardingPortalPage() {
         number_of_agents: centerNumberOfAgents,
         languages: centerLanguages,
         operating_hours: centerOperatingHours,
+        campaigns: splitCommaSeparatedValues(centerCampaigns),
+        buyer_count: centerBuyerCount,
+        sales_model: centerModel || undefined,
+        sales_model_other: centerModel === 'other' ? centerModelOther : undefined,
+        selling_markets: splitCommaSeparatedValues(centerSellingMarkets),
       });
 
       if (!parsed.success) {
@@ -490,10 +627,16 @@ export default function OnboardingPortalPage() {
         setCenterLocation('');
         setCenterWebsite('');
         setCenterContactEmail('');
-        setCenterContactPhone('');
+        setCenterWhatsAppCountryCode(DEFAULT_COUNTRY_CALLING_CODE);
+        setCenterWhatsAppNumber('');
         setCenterNumberOfAgents('');
         setCenterLanguages([]);
         setCenterOperatingHours('');
+        setCenterCampaigns('');
+        setCenterBuyerCount('');
+        setCenterModel('');
+        setCenterModelOther('');
+        setCenterSellingMarkets('');
         await refetchCenters();
       } catch (err) {
         setSubmitResult({ type: 'error', message: (err as Error).message || 'Unexpected error' });
@@ -623,6 +766,11 @@ export default function OnboardingPortalPage() {
     centerNumberOfAgents,
     centerLanguages,
     centerOperatingHours,
+    centerCampaigns,
+    centerBuyerCount,
+    centerModel,
+    centerModelOther,
+    centerSellingMarkets,
     pubCenterId,
     pubFullName,
     pubEmail,
@@ -635,7 +783,6 @@ export default function OnboardingPortalPage() {
     closerPositionOther,
     closerShift,
     refetchCenters,
-    navigate,
     toast,
   ]);
 
@@ -708,12 +855,13 @@ export default function OnboardingPortalPage() {
                   onChange={(ev) => setCenterContactEmail(ev.target.value)}
                   error={e('center.contact_email')}
                 />
-                <FormInput
-                  label="Contact Phone"
-                  type="tel"
-                  placeholder="(555) 123-4567"
-                  value={centerContactPhone}
-                  onChange={(ev) => setCenterContactPhone(ev.target.value)}
+                <PhoneWithCountryCodeInput
+                  label="WhatsApp"
+                  placeholder="555 123 4567"
+                  countryCode={centerWhatsAppCountryCode}
+                  localNumber={centerWhatsAppNumber}
+                  onCountryCodeChange={setCenterWhatsAppCountryCode}
+                  onLocalNumberChange={setCenterWhatsAppNumber}
                   error={e('center.contact_phone')}
                 />
               </div>
@@ -731,6 +879,50 @@ export default function OnboardingPortalPage() {
                   value={centerNumberOfAgents}
                   onChange={(ev) => setCenterNumberOfAgents(ev.target.value)}
                   error={e('center.number_of_agents')}
+                />
+                <FormInput
+                  label="Buyers"
+                  placeholder="e.g. 12"
+                  value={centerBuyerCount}
+                  onChange={(ev) => setCenterBuyerCount(ev.target.value)}
+                />
+                <FormInput
+                  label="Campaigns"
+                  placeholder="e.g. Auto, MVA, PI"
+                  value={centerCampaigns}
+                  onChange={(ev) => setCenterCampaigns(ev.target.value)}
+                />
+                <div>
+                  <FieldLabel>Model</FieldLabel>
+                  <Select
+                    value={centerModel}
+                    onValueChange={(v) => setCenterModel(v as CenterModelValue)}
+                  >
+                    <SelectTrigger className={DASH_SELECT_TRIGGER_CLASS}>
+                      <SelectValue placeholder="Select a model" />
+                    </SelectTrigger>
+                    <SelectContent className={DASH_SELECT_CONTENT_CLASS}>
+                      {CENTER_MODEL_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {centerModel === 'other' && (
+                  <FormInput
+                    label="Specify Model"
+                    placeholder="Enter model"
+                    value={centerModelOther}
+                    onChange={(ev) => setCenterModelOther(ev.target.value)}
+                  />
+                )}
+                <FormInput
+                  label="Market Target"
+                  placeholder="e.g. US, Canada, UK"
+                  value={centerSellingMarkets}
+                  onChange={(ev) => setCenterSellingMarkets(ev.target.value)}
                 />
                 <div>
                   <FieldLabel>Languages</FieldLabel>

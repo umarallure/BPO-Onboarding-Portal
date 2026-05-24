@@ -231,9 +231,14 @@ const AppShell = ({
         icon: <Eye className="h-4 w-4 text-current" />,
       },
       {
-        label: 'BPO Portal',
+        label: 'Sales Opportunity',
         to: '/submission-portal',
         icon: <CheckCircle className="h-4 w-4 text-current" />,
+      },
+      {
+        label: 'BPO Portal',
+        to: '/bpo-portal',
+        icon: <Package className="h-4 w-4 text-current" />,
       },
       {
         label: 'Slack',

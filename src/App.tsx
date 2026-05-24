@@ -49,6 +49,7 @@ import AccountBpoProfileDetailPage from "./pages/AccountBpoProfileDetailPage";
 import SectionPlaceholderPage from "./pages/SectionPlaceholderPage";
 import OnboardingPortalPage from "./pages/OnboardingPortalPage";
 import BpoManagementPage from "./pages/BpoManagementPage";
+import BpoPortalPage from "./pages/BpoPortalPage";
 import AppShell from "@/components/layout/AppShell";
 import LogoLoader from "@/components/LogoLoader";
 import { Navigate } from "react-router-dom";
@@ -444,11 +445,21 @@ const App = () => (
               path="/submission-portal" 
               element={
                 <ProtectedRoute>
-                  <AppShell title="BPO Portal">
+                  <AppShell title="Sales Opportunity">
                     <SubmissionPortalPage />
                   </AppShell>
                 </ProtectedRoute>
               } 
+            />
+            <Route
+              path="/bpo-portal"
+              element={
+                <ProtectedRoute>
+                  <AppShell title="BPO Portal">
+                    <BpoPortalPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
             />
             <Route
               path="/reports"

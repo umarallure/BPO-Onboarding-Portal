@@ -8,6 +8,8 @@ export interface CenterInfo {
   contact_email?: string | null;
   contact_phone?: string | null;
   center_did?: string | null;
+  location?: string | null;
+  number_of_agents?: string | null;
   is_active?: boolean | null;
 }
 
@@ -38,7 +40,7 @@ export const useCenters = () => {
 
       const { data, error: queryError } = await client
         .from("centers")
-        .select("id, center_name, lead_vendor, contact_email, contact_phone, center_did, is_active")
+        .select("id, center_name, lead_vendor, contact_email, contact_phone, center_did, location, number_of_agents, is_active")
         .order("center_name", { ascending: true });
 
       if (queryError) {
