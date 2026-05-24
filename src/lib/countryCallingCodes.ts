@@ -255,7 +255,7 @@ const COUNTRY_CALLING_CODES = [
 
 export const COUNTRY_CALLING_CODE_OPTIONS = COUNTRY_CALLING_CODES.map((country) => ({
   value: country.iso2,
-  label: `${country.iso2 === "GB" ? "UK" : country.iso2} (${country.dialCode})`,
+  label: `${country.name} (${country.dialCode})`,
   dialCode: country.dialCode,
 }));
 
