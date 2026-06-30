@@ -47,6 +47,7 @@ import AccountOrderDetailPage from "./pages/AccountOrderDetailPage";
 import AccountBpoProfilesPage from "./pages/AccountBpoProfilesPage";
 import AccountBpoProfileDetailPage from "./pages/AccountBpoProfileDetailPage";
 import SectionPlaceholderPage from "./pages/SectionPlaceholderPage";
+import IncentivesPage from "./pages/IncentivesPage";
 import OnboardingPortalPage from "./pages/OnboardingPortalPage";
 import BpoManagementPage from "./pages/BpoManagementPage";
 import BpoPortalPage from "./pages/BpoPortalPage";
@@ -580,6 +581,16 @@ const App = () => (
                   </AppShell>
                 </ProtectedRoute>
               } 
+            />
+            <Route
+              path="/incentives"
+              element={
+                <ProtectedRoute>
+                  <AppShell title="Incentives & Flash Bonuses">
+                    <IncentivesPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
             />
             <Route
               path="/admin-analytics/*"

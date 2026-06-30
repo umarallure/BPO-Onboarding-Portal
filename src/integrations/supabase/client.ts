@@ -46,6 +46,10 @@ const LOGIN_ALLOWED_TABLES = new Set([
   'attorney_profile_score_items',
   'team_members',
   'centers',
+  'incentives',
+  'incentive_rules',
+  'bpo_incentive_progress',
+  'incentive_payouts',
 ]);
 
 const createMockQueryBuilder = () => {

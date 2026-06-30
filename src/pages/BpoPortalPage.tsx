@@ -19,6 +19,7 @@ import {
   COMPANY_SIZE_OPTIONS,
 } from "@/lib/centerFilters";
 import { Pencil, RefreshCw, SlidersHorizontal, StickyNote, X } from "lucide-react";
+import { ChallengeBoard } from "@/components/ChallengeBoard";
 
 const BPO_PORTAL_COLUMNS = Array.from({ length: 8 }, (_, index) => `placeholder-column-${index + 1}`);
 
@@ -42,6 +43,8 @@ const BpoPortalPage = () => {
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
         <div className="mx-auto max-w-7xl space-y-6">
+          <ChallengeBoard />
+
           <div className="rounded-2xl border bg-card p-4 shadow-sm">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
               <div className="grid flex-1 gap-3 xl:grid-cols-[minmax(300px,1fr)_auto_auto]">

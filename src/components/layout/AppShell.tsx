@@ -20,6 +20,7 @@ import {
   X,
   Sun,
   Moon,
+  Flame,
 } from 'lucide-react';
 
 import { TbUserShield } from "react-icons/tb";
@@ -298,6 +299,12 @@ const AppShell = ({
         label: 'Lead Assignment',
         to: '/lead-assignment',
         icon: <Users className="h-4 w-4 text-current" />,
+        show: isSuperAdmin,
+      },
+      {
+        label: 'Incentives',
+        to: '/incentives',
+        icon: <Flame className="h-4 w-4 text-current" />,
         show: isSuperAdmin,
       },
     ];
