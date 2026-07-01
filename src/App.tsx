@@ -585,7 +585,7 @@ const App = () => (
             <Route
               path="/incentives"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute requireAdminOrSuperAdmin>
                   <AppShell title="Incentives & Flash Bonuses">
                     <IncentivesPage />
                   </AppShell>

@@ -15,11 +15,10 @@ const json = (body: unknown, status = 200) =>
   });
 
 const requestSchema = z.object({
-  bpo_id: z.string().uuid(),
-  state: z.string().max(2).optional().default(''),
-  sol_months: z.number().int().min(0).optional().nullable(),
-  attorney_id: z.string().uuid().optional().nullable(),
+  lead_id: z.string().uuid(),
 });
+
+const normalize = (value: string | null | undefined) => (value ?? '').trim().toLowerCase();
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -32,45 +31,96 @@ serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const authHeader = req.headers.get('authorization') ?? '';
+
+    if (!authHeader.toLowerCase().startsWith('bearer ')) {
+      return json({ error: 'Missing bearer token' }, 401);
+    }
 
     const admin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
+
+    const authClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    const { data: userData, error: userError } = await authClient.auth.getUser();
+    if (userError || !userData.user) {
+      return json({ error: 'Invalid bearer token' }, 401);
+    }
 
     const parsed = requestSchema.safeParse(await req.json());
     if (!parsed.success) {
       return json({ error: 'Validation failed', fieldErrors: parsed.error.flatten().fieldErrors }, 400);
     }
 
-    const { bpo_id, state, sol_months, attorney_id } = parsed.data;
+    const { lead_id } = parsed.data;
 
-    // Verify the BPO user exists and has a valid publisher role
-    const { data: bpoUser, error: bpoError } = await admin
+    const { data: requester, error: requesterError } = await admin
       .from('app_users')
-      .select('user_id, role, account_status')
-      .eq('user_id', bpo_id)
+      .select('user_id, role, center_id, is_super_admin')
+      .eq('user_id', userData.user.id)
       .maybeSingle();
 
-    if (bpoError) {
-      return json({ error: bpoError.message }, 500);
+    if (requesterError) {
+      return json({ error: requesterError.message }, 500);
     }
-    if (!bpoUser) {
-      return json({ error: 'BPO user not found' }, 404);
-    }
-    if (!['publisher_admin', 'publisher_closer'].includes(bpoUser.role ?? '')) {
-      return json({ error: 'Invalid BPO user role' }, 403);
+    if (!requester) {
+      return json({ error: 'Portal user not found' }, 404);
     }
 
-    // Expire any overdue incentives first
-    await admin.rpc('expire_incentives');
+    const requesterRole = requester.role ?? '';
+    const isAdmin = requester.is_super_admin === true || ['super_admin', 'admin'].includes(requesterRole);
+    const isPublisher = ['publisher_admin', 'publisher_closer'].includes(requesterRole);
+    if (!isAdmin && !isPublisher) {
+      return json({ error: 'Invalid portal role' }, 403);
+    }
 
-    // Call the rule matching engine
-    const { data: matches, error: matchError } = await admin.rpc('check_incentive_for_sale', {
-      p_bpo_id: bpo_id,
-      p_state: state || null,
-      p_sol_months: sol_months ?? null,
-      p_attorney_id: attorney_id ?? null,
+    const { data: lead, error: leadError } = await admin
+      .from('leads')
+      .select('id, status, lead_vendor, user_id')
+      .eq('id', lead_id)
+      .maybeSingle();
+
+    if (leadError) {
+      return json({ error: leadError.message }, 500);
+    }
+    if (!lead) {
+      return json({ error: 'Lead not found' }, 404);
+    }
+    if (lead.status !== 'qualified_payable') {
+      return json({ error: 'Lead is not qualified payable' }, 409);
+    }
+
+    if (!isAdmin) {
+      let allowed = lead.user_id === userData.user.id;
+
+      if (!allowed && requester.center_id) {
+        const { data: center, error: centerError } = await admin
+          .from('centers')
+          .select('lead_vendor')
+          .eq('id', requester.center_id)
+          .maybeSingle();
+
+        if (centerError) {
+          return json({ error: centerError.message }, 500);
+        }
+
+        allowed = normalize(center?.lead_vendor) !== '' &&
+          normalize(center?.lead_vendor) === normalize(lead.lead_vendor);
+      }
+
+      if (!allowed) {
+        return json({ error: 'Lead is outside requester center' }, 403);
+      }
+    }
+
+    const { data: matches, error: matchError } = await admin.rpc('record_incentives_for_qualified_lead', {
+      p_lead_id: lead_id,
     });
 
     if (matchError) {
@@ -79,6 +129,7 @@ serve(async (req) => {
 
     return json({
       success: true,
+      lead_id,
       incentives_matched: matches ?? [],
       matched_count: Array.isArray(matches) ? matches.length : 0,
     });

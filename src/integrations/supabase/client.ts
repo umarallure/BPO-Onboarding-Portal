@@ -52,6 +52,16 @@ const LOGIN_ALLOWED_TABLES = new Set([
   'incentive_payouts',
 ]);
 
+const LOGIN_ALLOWED_RPCS = new Set([
+  'create_incentive_with_rules',
+  'approve_incentive',
+  'pause_incentive',
+  'resume_incentive',
+  'reject_incentive',
+  'archive_incentive',
+  'expire_incentives',
+]);
+
 const createMockQueryBuilder = () => {
   const listResponse = Promise.resolve({ data: [], error: null, count: 0 });
   const singleResponse = Promise.resolve({ data: null, error: null, count: 0 });
@@ -88,7 +98,16 @@ export const supabase = (ENABLE_DATALESS_PORTAL_MODE
         }
 
         if (prop === 'rpc') {
-          return () => Promise.resolve({ data: null, error: null });
+          return (fn: string, args?: Record<string, unknown>, options?: Record<string, unknown>) => {
+            if (LOGIN_ALLOWED_RPCS.has(fn)) {
+              const untypedTarget = target as unknown as {
+                rpc: (name: string, params?: Record<string, unknown>, rpcOptions?: Record<string, unknown>) => unknown;
+              };
+              return untypedTarget.rpc(fn, args, options);
+            }
+
+            return Promise.resolve({ data: null, error: null });
+          };
         }
 
         return Reflect.get(target, prop, receiver);

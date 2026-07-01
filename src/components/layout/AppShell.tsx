@@ -106,11 +106,13 @@ const AppShell = ({
   });
 
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [canManageIncentives, setCanManageIncentives] = useState(false);
 
   useEffect(() => {
     const run = async () => {
       if (!user?.id) {
         setIsSuperAdmin(false);
+        setCanManageIncentives(false);
         return;
       }
 
@@ -134,12 +136,19 @@ const AppShell = ({
         const typed = data as { role?: string | null; is_super_admin?: boolean } | null;
         if (error) {
           setIsSuperAdmin(false);
+          setCanManageIncentives(false);
           return;
         }
 
         setIsSuperAdmin(Boolean(typed?.is_super_admin) || typed?.role === 'super_admin');
+        setCanManageIncentives(
+          Boolean(typed?.is_super_admin) ||
+          typed?.role === 'super_admin' ||
+          typed?.role === 'admin'
+        );
       } catch {
         setIsSuperAdmin(false);
+        setCanManageIncentives(false);
       }
     };
 
@@ -305,12 +314,12 @@ const AppShell = ({
         label: 'Incentives',
         to: '/incentives',
         icon: <Flame className="h-4 w-4 text-current" />,
-        show: isSuperAdmin,
+        show: canManageIncentives,
       },
     ];
 
     return items.filter((i) => i.show !== false);
-  }, [isSuperAdmin]);
+  }, [canManageIncentives, isSuperAdmin]);
 
   const handleSignOut = async () => {
     await signOut();
